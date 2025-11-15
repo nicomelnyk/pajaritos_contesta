@@ -24,6 +24,18 @@
 
 ### 3. Configure Facebook Login Settings
 
+**⚠️ IMPORTANT: Disable Vercel Deployment Protection First!**
+
+Before Facebook can verify your Privacy Policy URL, you need to disable Vercel's deployment protection:
+
+1. Go to your [Vercel Dashboard](https://vercel.com/dashboard)
+2. Select your project: **pajaritos_contesta**
+3. Go to **Settings** → **Deployment Protection**
+4. **Disable** deployment protection (or set it to "Public" for production)
+5. This allows Facebook to access your privacy policy URL
+
+**Now configure Facebook settings:**
+
 1. Go to **Settings** → **Basic** (left sidebar)
 2. Note down:
    - **App ID** (you'll need this)
