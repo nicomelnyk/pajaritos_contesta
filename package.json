@@ -14,6 +14,7 @@
   "description": "",
   "dependencies": {
     "@auth/core": "^0.41.0",
+    "@tailwindcss/postcss": "^4.1.17",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
