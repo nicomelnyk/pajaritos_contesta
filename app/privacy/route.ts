@@ -1,4 +1,7 @@
-<!DOCTYPE html>
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -82,5 +85,13 @@
         <p>If you have questions about this Privacy Policy, please contact us through the application.</p>
     </section>
 </body>
-</html>
+</html>`;
+
+  return new NextResponse(html, {
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "public, max-age=3600",
+    },
+  });
+}
 
