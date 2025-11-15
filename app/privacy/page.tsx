@@ -1,3 +1,11 @@
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Privacy Policy - Pajaritos Contesta",
+  description: "Privacy Policy for Pajaritos Contesta Facebook Group Auto-Response App",
+  robots: "index, follow",
+};
+
 export default function PrivacyPolicy() {
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">

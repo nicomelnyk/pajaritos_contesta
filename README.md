@@ -38,7 +38,9 @@ cp .env.local.example .env.local
 Required variables:
 - `FACEBOOK_APP_ID` - Your Facebook App ID
 - `FACEBOOK_APP_SECRET` - Your Facebook App Secret
-- `NEXTAUTH_URL` - Your app URL (http://localhost:3000 for dev)
+- `NEXTAUTH_URL` - Your app URL 
+  - For dev: `http://localhost:3000`
+  - For production: `https://pajaritoscontesta-4zx9v6ytm-nicolasmelnyks-projects.vercel.app`
 - `NEXTAUTH_SECRET` - Random secret (generate with `openssl rand -base64 32`)
 
 ### 3. Facebook App Setup
@@ -78,11 +80,20 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ## Deployment to Vercel
 
-1. Push your code to GitHub
-2. Import project in Vercel
-3. Add environment variables in Vercel dashboard
-4. Update Facebook OAuth redirect URIs with your Vercel domain
-5. Deploy!
+✅ **Already deployed!** Your app is live at:
+`https://pajaritoscontesta-4zx9v6ytm-nicolasmelnyks-projects.vercel.app`
+
+**Important:** Add environment variables in Vercel Dashboard:
+1. Go to your project in [Vercel Dashboard](https://vercel.com/dashboard)
+2. Navigate to **Settings** → **Environment Variables**
+3. Add all required variables (see Step 2 above)
+4. Make sure `NEXTAUTH_URL` is set to your production URL
+5. Redeploy if needed
+
+**For future deployments:**
+- Push your code to GitHub
+- Vercel will auto-deploy on push
+- Update Facebook OAuth redirect URIs if domain changes
 
 ## Important Notes
 

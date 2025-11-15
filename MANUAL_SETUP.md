@@ -29,11 +29,13 @@
    - **App ID** (you'll need this)
    - **App Secret** (click "Show" to reveal - you'll need this)
 3. Go to **Settings** → **Basic** and add:
-   - **App Domains**: `localhost` (for dev), your Vercel domain (for production)
+   - **App Domains**: 
+     - For development: `localhost`
+     - For production: `pajaritoscontesta-4zx9v6ytm-nicolasmelnyks-projects.vercel.app`
    - **Privacy Policy URL**: 
      - For development: `http://localhost:3000/privacy`
-     - For production: `https://your-app-name.vercel.app/privacy`
-     - ⚠️ **Required even for development mode!**
+     - For production: `https://pajaritoscontesta-4zx9v6ytm-nicolasmelnyks-projects.vercel.app/privacy`
+     - ⚠️ **Required even for development mode!** (Use the production URL)
    - **Terms of Service URL**: (optional)
    - **User Data Deletion**: (optional callback URL)
 
@@ -43,9 +45,9 @@
 2. Under **"Valid OAuth Redirect URIs"**, add:
    ```
    http://localhost:3000/api/auth/callback/facebook
-   https://your-app-name.vercel.app/api/auth/callback/facebook
+   https://pajaritoscontesta-4zx9v6ytm-nicolasmelnyks-projects.vercel.app/api/auth/callback/facebook
    ```
-   (Replace `your-app-name` with your actual Vercel app name)
+   (Add both URLs - localhost for local development, Vercel URL for production)
 
 ### 5. Request Required Permissions
 
@@ -90,13 +92,22 @@
 
 ### 9. Get Your Credentials
 
-After setup, you'll need these values for your `.env.local` file:
+After setup, you'll need these values:
 
+**For local development (`.env.local` file):**
 ```
 FACEBOOK_APP_ID=your_app_id_here
 FACEBOOK_APP_SECRET=your_app_secret_here
-NEXTAUTH_URL=http://localhost:3000 (for dev)
+NEXTAUTH_URL=http://localhost:3000
 NEXTAUTH_SECRET=generate_a_random_string_here
+```
+
+**For Vercel production (add in Vercel Dashboard → Settings → Environment Variables):**
+```
+FACEBOOK_APP_ID=your_app_id_here
+FACEBOOK_APP_SECRET=your_app_secret_here
+NEXTAUTH_URL=https://pajaritoscontesta-4zx9v6ytm-nicolasmelnyks-projects.vercel.app
+NEXTAUTH_SECRET=generate_a_random_string_here (use the same secret as dev)
 ```
 
 **To generate NEXTAUTH_SECRET:**
