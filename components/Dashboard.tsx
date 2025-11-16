@@ -35,6 +35,11 @@ export default function Dashboard({ session }: DashboardProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Comment from URL feature
+  const [postUrl, setPostUrl] = useState<string>("");
+  const [commentText, setCommentText] = useState<string>("");
+  const [commenting, setCommenting] = useState(false);
 
   useEffect(() => {
     fetchGroups();
@@ -105,6 +110,44 @@ export default function Dashboard({ session }: DashboardProps) {
     } catch (err) {
       alert("Failed to post comment");
       console.error(err);
+    }
+  };
+
+  const postCommentFromUrl = async () => {
+    if (!postUrl.trim() || !commentText.trim()) {
+      alert("Please provide both a post URL and comment text");
+      return;
+    }
+
+    setCommenting(true);
+    setError(null);
+    
+    try {
+      const response = await fetch("/api/facebook/comment-from-url", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ postUrl: postUrl.trim(), message: commentText.trim() }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.error) {
+        setError(data.error);
+        alert(`Error: ${data.error}`);
+      } else {
+        alert("Comment posted successfully!");
+        setPostUrl("");
+        setCommentText("");
+      }
+    } catch (err) {
+      const errorMsg = "Failed to post comment";
+      setError(errorMsg);
+      alert(errorMsg);
+      console.error(err);
+    } finally {
+      setCommenting(false);
     }
   };
 
@@ -216,6 +259,53 @@ export default function Dashboard({ session }: DashboardProps) {
           </div>
         )}
 
+        {/* Comment from URL Section */}
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4">Comment on Any Post</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Paste a Facebook group post URL and write a comment to post it automatically.
+          </p>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Facebook Post URL
+              </label>
+              <input
+                type="text"
+                value={postUrl}
+                onChange={(e) => setPostUrl(e.target.value)}
+                placeholder="https://www.facebook.com/groups/123456789/posts/987654321/"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Paste the full URL of the Facebook post you want to comment on
+              </p>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Comment Text
+              </label>
+              <textarea
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                placeholder="Write your comment here..."
+                rows={4}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            
+            <button
+              onClick={postCommentFromUrl}
+              disabled={commenting || !postUrl.trim() || !commentText.trim()}
+              className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-semibold"
+            >
+              {commenting ? "Posting Comment..." : "Post Comment"}
+            </button>
+          </div>
+        </div>
+
         {/* Info Section */}
         <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
           <h3 className="font-semibold text-blue-900 mb-2">
@@ -226,6 +316,7 @@ export default function Dashboard({ session }: DashboardProps) {
             <li>Your access token is stored securely in your session</li>
             <li>All API calls use your personal access token</li>
             <li>Multiple users can use the same app with their own tokens</li>
+            <li>Paste any Facebook post URL and comment directly</li>
           </ul>
         </div>
       </main>
