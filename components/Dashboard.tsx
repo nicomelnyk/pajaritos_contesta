@@ -134,8 +134,9 @@ export default function Dashboard({ session }: DashboardProps) {
       const data = await response.json();
       
       if (data.error) {
+        const errorMsg = data.error + (data.hint ? `\n\nTip: ${data.hint}` : "");
         setError(data.error);
-        alert(`Error: ${data.error}`);
+        alert(errorMsg);
       } else {
         alert("Comment posted successfully!");
         setPostUrl("");
@@ -279,7 +280,10 @@ export default function Dashboard({ session }: DashboardProps) {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Paste the full URL of the Facebook post you want to comment on
+                Paste the direct URL of the Facebook post (not share URLs). To get it: Open the post → Click timestamp → Copy URL
+              </p>
+              <p className="text-xs text-yellow-600 mt-1">
+                ⚠️ Share URLs (facebook.com/share/p/...) don't work. Use direct post URLs.
               </p>
             </div>
             

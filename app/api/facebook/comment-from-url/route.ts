@@ -85,30 +85,44 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // For share URLs, try to get the actual post ID by fetching the post first
-    // Share URLs use encoded IDs that need to be resolved
     const apiVersion = process.env.FACEBOOK_API_VERSION || "v18.0";
     
-    // Try to fetch the post first to get the actual ID (for share URLs)
-    let actualPostId = postId;
-    if (!/^\d+$/.test(postId)) {
-      // This might be an encoded ID from a share URL, try to resolve it
+    // Check if this is a share URL (non-numeric ID)
+    const isShareUrl = !/^\d+$/.test(postId);
+    
+    if (isShareUrl) {
+      // Share URLs cannot be used directly with Graph API
+      // Try to use oEmbed API to get the actual post URL, then extract ID from that
       try {
-        const postResponse = await fetch(
-          `https://graph.facebook.com/${apiVersion}/${postId}?access_token=${session.accessToken}&fields=id`,
-          { method: "GET" }
-        );
-        const postData = await postResponse.json();
-        if (postData.id) {
-          actualPostId = postData.id;
+        const oembedUrl = `https://graph.facebook.com/${apiVersion}/oembed_post?url=${encodeURIComponent(postUrl)}&access_token=${session.accessToken}`;
+        const oembedResponse = await fetch(oembedUrl);
+        const oembedData = await oembedResponse.json();
+        
+        if (oembedData.html) {
+          // Try to extract post ID from the oEmbed HTML or URL
+          // Unfortunately, oEmbed doesn't give us the post ID directly
+          // So we need to tell the user to use a direct URL
+          return NextResponse.json(
+            { 
+              error: "Share URLs are not supported. Please use the direct post URL instead. To get it: 1) Open the post on Facebook, 2) Click the timestamp or '...' menu, 3) Copy the direct URL (usually contains '/posts/' or a numeric ID).",
+              hint: "Share URLs (facebook.com/share/p/...) cannot be used with the API. Use direct post URLs like: facebook.com/groups/.../posts/... or facebook.com/{postId}"
+            },
+            { status: 400 }
+          );
         }
       } catch (e) {
-        // If resolution fails, try using the original ID
-        console.log("Could not resolve share URL, using original ID");
+        // oEmbed failed, return helpful error
+        return NextResponse.json(
+          { 
+            error: "Share URLs are not supported. Please use the direct post URL. To get it: Open the post on Facebook, click the timestamp, and copy that URL.",
+            hint: "Use direct URLs like: facebook.com/groups/.../posts/... or facebook.com/{numericId}"
+          },
+          { status: 400 }
+        );
       }
     }
     
-    const url = `https://graph.facebook.com/${apiVersion}/${actualPostId}/comments`;
+    const url = `https://graph.facebook.com/${apiVersion}/${postId}/comments`;
 
     const response = await fetch(url, {
       method: "POST",
