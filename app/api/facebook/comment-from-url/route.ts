@@ -209,8 +209,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const data = await response.json();
-
     if (data.error) {
       let errorMessage = data.error.message || data.error.error_user_msg || "Failed to post comment";
       
