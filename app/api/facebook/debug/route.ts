@@ -70,56 +70,124 @@ export async function GET(request: NextRequest) {
       }
 
       if (testPostId) {
-        // Try to read the post
-        try {
-          const readUrl = `https://graph.facebook.com/${apiVersion}/${testPostId}?access_token=${accessToken}&fields=id,message,from,created_time`;
-          const readResponse = await fetch(readUrl);
-          const readData = await readResponse.json();
+        // Extract group ID from URL if available
+        let groupId: string | null = null;
+        if (postUrl) {
+          try {
+            const cleanUrl = postUrl.split("?")[0].split("#")[0];
+            const groupsMatch = cleanUrl.match(/\/groups\/(\d+)\/posts\//);
+            if (groupsMatch) {
+              groupId = groupsMatch[1];
+            }
+          } catch (e) {
+            // Ignore
+          }
+        }
+
+        // Try different post ID formats
+        const postIdFormats: string[] = [testPostId];
+        if (groupId) {
+          // Group posts might need format: {groupId}_{postId}
+          postIdFormats.push(`${groupId}_${testPostId}`);
+        }
+
+        results.postAccess.attempts = [];
+
+        for (const postIdFormat of postIdFormats) {
+          const attempt: any = { format: postIdFormat };
           
-          if (readData.error) {
-            results.postAccess.read = {
+          // Try to read the post
+          try {
+            const readUrl = `https://graph.facebook.com/${apiVersion}/${postIdFormat}?access_token=${accessToken}&fields=id,message,from,created_time`;
+            const readResponse = await fetch(readUrl);
+            const readData = await readResponse.json();
+            
+            if (readData.error) {
+              attempt.read = {
+                success: false,
+                error: readData.error,
+                errorCode: readData.error.code,
+                errorMessage: readData.error.message,
+              };
+            } else {
+              attempt.read = {
+                success: true,
+                data: readData,
+              };
+              // If this format works, use it as the successful one
+              results.postAccess.read = attempt.read;
+              results.postAccess.workingFormat = postIdFormat;
+            }
+          } catch (e: any) {
+            attempt.read = {
               success: false,
-              error: readData.error,
-              errorCode: readData.error.code,
-              errorMessage: readData.error.message,
-            };
-          } else {
-            results.postAccess.read = {
-              success: true,
-              data: readData,
+              error: e.message,
             };
           }
-        } catch (e: any) {
-          results.postAccess.read = {
+
+          // Try to get comments
+          try {
+            const commentsUrl = `https://graph.facebook.com/${apiVersion}/${postIdFormat}/comments?access_token=${accessToken}&limit=1`;
+            const commentsResponse = await fetch(commentsUrl);
+            const commentsData = await commentsResponse.json();
+            
+            if (commentsData.error) {
+              attempt.comments = {
+                success: false,
+                error: commentsData.error,
+                errorCode: commentsData.error.code,
+                errorMessage: commentsData.error.message,
+              };
+            } else {
+              attempt.comments = {
+                success: true,
+                canRead: true,
+              };
+            }
+          } catch (e: any) {
+            attempt.comments = {
+              success: false,
+              error: e.message,
+            };
+          }
+
+          results.postAccess.attempts.push(attempt);
+        }
+
+        // If no format worked, use the first attempt's error
+        if (!results.postAccess.read) {
+          results.postAccess.read = results.postAccess.attempts[0]?.read || {
             success: false,
-            error: e.message,
+            error: "All formats failed",
           };
         }
 
-        // Try to get comments (to see if we can access comments endpoint)
-        try {
-          const commentsUrl = `https://graph.facebook.com/${apiVersion}/${testPostId}/comments?access_token=${accessToken}&limit=1`;
-          const commentsResponse = await fetch(commentsUrl);
-          const commentsData = await commentsResponse.json();
-          
-          if (commentsData.error) {
-            results.postAccess.comments = {
+        // Try to access the group itself (if we have group ID)
+        if (groupId) {
+          try {
+            const groupUrl = `https://graph.facebook.com/${apiVersion}/${groupId}?access_token=${accessToken}&fields=id,name,privacy`;
+            const groupResponse = await fetch(groupUrl);
+            const groupData = await groupResponse.json();
+            
+            if (groupData.error) {
+              results.groupAccess = {
+                success: false,
+                error: groupData.error,
+                errorCode: groupData.error.code,
+                errorMessage: groupData.error.message,
+              };
+            } else {
+              results.groupAccess = {
+                success: true,
+                data: groupData,
+              };
+            }
+          } catch (e: any) {
+            results.groupAccess = {
               success: false,
-              error: commentsData.error,
-              errorCode: commentsData.error.code,
-              errorMessage: commentsData.error.message,
-            };
-          } else {
-            results.postAccess.comments = {
-              success: true,
-              canRead: true,
+              error: e.message,
             };
           }
-        } catch (e: any) {
-          results.postAccess.comments = {
-            success: false,
-            error: e.message,
-          };
         }
       }
     }
