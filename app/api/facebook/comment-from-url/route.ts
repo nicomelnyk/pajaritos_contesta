@@ -122,6 +122,29 @@ export async function POST(request: NextRequest) {
       }
     }
     
+    // First, try to verify the post exists and is accessible
+    try {
+      const verifyUrl = `https://graph.facebook.com/${apiVersion}/${postId}?access_token=${session.accessToken}&fields=id,message`;
+      const verifyResponse = await fetch(verifyUrl);
+      const verifyData = await verifyResponse.json();
+      
+      if (verifyData.error) {
+        // If we can't even read the post, we definitely can't comment
+        if (verifyData.error.code === 10 || verifyData.error.code === 200) {
+          return NextResponse.json(
+            { 
+              error: "Cannot access this post. This might be a group post, and Facebook has deprecated the Groups API. Commenting on group posts is no longer possible through the API.",
+              hint: "Facebook deprecated the Groups API in 2024. You can only comment on posts from Pages or your own profile, not group posts."
+            },
+            { status: 403 }
+          );
+        }
+      }
+    } catch (e) {
+      // Continue anyway, might still work
+      console.log("Could not verify post, proceeding anyway");
+    }
+
     const url = `https://graph.facebook.com/${apiVersion}/${postId}/comments`;
 
     const response = await fetch(url, {
@@ -138,8 +161,20 @@ export async function POST(request: NextRequest) {
     const data = await response.json();
 
     if (data.error) {
+      let errorMessage = data.error.message || data.error.error_user_msg || "Failed to post comment";
+      
+      // Provide helpful messages for common errors
+      if (data.error.code === 10) {
+        errorMessage = "Application does not have permission for this action. Facebook has deprecated the Groups API, so commenting on group posts is no longer possible through the API. You can only comment on posts from Pages or your own profile.";
+      } else if (data.error.code === 200) {
+        errorMessage = "Permission denied. This is likely a group post, and Facebook no longer allows API access to group posts.";
+      }
+      
       return NextResponse.json(
-        { error: data.error.message || data.error.error_user_msg || "Failed to post comment" },
+        { 
+          error: errorMessage,
+          hint: "Facebook deprecated the Groups API in 2024. Group posts cannot be commented on via API. Try commenting on Page posts or your own posts instead."
+        },
         { status: 400 }
       );
     }
