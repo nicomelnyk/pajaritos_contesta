@@ -24,7 +24,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       clientSecret: process.env.FACEBOOK_APP_SECRET!,
       authorization: {
         params: {
-          scope: "email public_profile groups_access_member_info publish_to_groups",
+          scope: "email public_profile",
+          // Note: groups_access_member_info and publish_to_groups were deprecated by Facebook in 2024
+          // These permissions are no longer available through the Facebook Graph API
         },
       },
     }),
