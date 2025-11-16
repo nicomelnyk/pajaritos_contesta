@@ -49,7 +49,9 @@ Before Facebook can verify your Privacy Policy URL, you need to disable Vercel's
      - For production: `https://pajaritoscontesta-4zx9v6ytm-nicolasmelnyks-projects.vercel.app/privacy`
      - ⚠️ **Required even for development mode!** (Use the production URL)
    - **Terms of Service URL**: (optional)
-   - **User Data Deletion**: (optional callback URL)
+   - **User Data Deletion**: 
+     - For production: `https://pajaritoscontesta-4zx9v6ytm-nicolasmelnyks-projects.vercel.app/data-deletion`
+     - ⚠️ **Required for activating Facebook Login!**
 
 ### 4. Configure OAuth Redirect URIs
 
