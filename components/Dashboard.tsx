@@ -40,6 +40,8 @@ export default function Dashboard({ session }: DashboardProps) {
   const [postUrl, setPostUrl] = useState<string>("");
   const [commentText, setCommentText] = useState<string>("");
   const [commenting, setCommenting] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [debugging, setDebugging] = useState(false);
 
   useEffect(() => {
     fetchGroups();
@@ -110,6 +112,25 @@ export default function Dashboard({ session }: DashboardProps) {
     } catch (err) {
       alert("Failed to post comment");
       console.error(err);
+    }
+  };
+
+  const runDebug = async () => {
+    setDebugging(true);
+    setDebugInfo(null);
+    
+    try {
+      const url = postUrl.trim() 
+        ? `/api/facebook/debug?postUrl=${encodeURIComponent(postUrl.trim())}`
+        : "/api/facebook/debug";
+      const response = await fetch(url);
+      const data = await response.json();
+      setDebugInfo(data);
+    } catch (err) {
+      console.error("Debug error:", err);
+      alert("Failed to run debug");
+    } finally {
+      setDebugging(false);
     }
   };
 
@@ -307,14 +328,33 @@ export default function Dashboard({ session }: DashboardProps) {
               />
             </div>
             
-            <button
-              onClick={postCommentFromUrl}
-              disabled={commenting || !postUrl.trim() || !commentText.trim()}
-              className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-semibold"
-            >
-              {commenting ? "Posting Comment..." : "Post Comment"}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={postCommentFromUrl}
+                disabled={commenting || !postUrl.trim() || !commentText.trim()}
+                className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-semibold"
+              >
+                {commenting ? "Posting Comment..." : "Post Comment"}
+              </button>
+              <button
+                onClick={runDebug}
+                disabled={debugging}
+                className="px-4 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                title="Debug: Check token permissions and post access"
+              >
+                {debugging ? "Debugging..." : "🔍 Debug"}
+              </button>
+            </div>
           </div>
+          
+          {debugInfo && (
+            <div className="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <h3 className="font-semibold mb-2">Debug Information:</h3>
+              <pre className="text-xs overflow-auto max-h-96 bg-white p-3 rounded border">
+                {JSON.stringify(debugInfo, null, 2)}
+              </pre>
+            </div>
+          )}
         </div>
 
         {/* Info Section */}
