@@ -72,6 +72,31 @@ async function getAppAccessToken(): Promise<string | null> {
   }
 }
 
+// Get Page access token for a specific Page (if post is from a Page)
+async function getPageAccessToken(userToken: string, pageId?: string): Promise<string | null> {
+  try {
+    const apiVersion = process.env.FACEBOOK_API_VERSION || "v18.0";
+    const url = `https://graph.facebook.com/${apiVersion}/me/accounts?access_token=${userToken}&fields=id,access_token`;
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.error || !data.data) return null;
+    
+    // If pageId provided, find that specific page's token
+    if (pageId) {
+      const page = data.data.find((p: any) => p.id === pageId);
+      return page?.access_token || null;
+    }
+    
+    // Otherwise return first page's token
+    return data.data[0]?.access_token || null;
+  } catch (e) {
+    console.error("Error getting page access token:", e);
+    return null;
+  }
+}
+
 // Post a comment on a post using URL
 export async function POST(request: NextRequest) {
   try {
@@ -96,6 +121,20 @@ export async function POST(request: NextRequest) {
 
     // Extract post ID from URL
     let postId = extractPostIdFromUrl(postUrl);
+    
+    // Try to detect if this is a Page post (extract page ID from URL)
+    let pageId: string | null = null;
+    try {
+      const cleanUrl = postUrl.split("?")[0].split("#")[0];
+      // Pattern: facebook.com/{page-name-or-id}/posts/{postId}
+      const pagePostMatch = cleanUrl.match(/facebook\.com\/([^\/]+)\/posts\/(\d+)/);
+      if (pagePostMatch && !cleanUrl.includes("/groups/")) {
+        // This might be a Page post - we'll try to get the page token
+        // Note: We can't reliably get pageId from URL without making an API call
+      }
+    } catch (e) {
+      // Ignore
+    }
     
     if (!postId) {
       return NextResponse.json(
@@ -182,30 +221,50 @@ export async function POST(request: NextRequest) {
 
     let data = await response.json();
 
-    // If user token fails with permission error, try app token (unlikely to work for groups, but worth trying)
+    // If user token fails, try Page token (for Page posts) or app token (for testing)
     if (data.error && (data.error.code === 10 || data.error.code === 200)) {
-      const appToken = await getAppAccessToken();
-      if (appToken) {
-        // Try with app token - this would post "as the app" rather than "on behalf of user"
-        // Note: This likely won't work for groups either, but testing it
-        const appResponse = await fetch(url, {
+      // First, try Page access token (if this is a Page post)
+      const pageToken = await getPageAccessToken(session.accessToken, pageId || undefined);
+      if (pageToken) {
+        const pageResponse = await fetch(url, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
             message,
-            access_token: appToken,
+            access_token: pageToken,
           }),
         });
-        const appData = await appResponse.json();
+        const pageData = await pageResponse.json();
         
-        // If app token works, use that result
-        if (!appData.error) {
-          data = appData;
-          response = appResponse;
+        if (!pageData.error) {
+          data = pageData;
+          response = pageResponse;
         }
-        // Otherwise, continue with user token error
+      }
+      
+      // If Page token didn't work, try app token (unlikely to work, but worth trying)
+      if (data.error) {
+        const appToken = await getAppAccessToken();
+        if (appToken) {
+          const appResponse = await fetch(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              message,
+              access_token: appToken,
+            }),
+          });
+          const appData = await appResponse.json();
+          
+          if (!appData.error) {
+            data = appData;
+            response = appResponse;
+          }
+        }
       }
     }
 

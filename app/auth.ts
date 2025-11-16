@@ -24,9 +24,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       clientSecret: process.env.FACEBOOK_APP_SECRET!,
       authorization: {
         params: {
-          scope: "email public_profile user_posts",
-          // Note: groups_access_member_info and publish_to_groups were deprecated by Facebook in 2024
-          // Trying user_posts to see if it helps access posts (though group posts may still be blocked)
+          scope: "email public_profile user_posts pages_manage_posts pages_show_list",
+          // Note: Groups API was deprecated in April 2024 (groups_access_member_info, publish_to_groups)
+          // Pages API still works - adding pages_manage_posts and pages_show_list for Page post commenting
         },
       },
     }),
