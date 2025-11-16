@@ -284,16 +284,27 @@ export default function Dashboard({ session }: DashboardProps) {
         {/* Comment from URL Section */}
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">Comment on Any Post</h2>
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-            <p className="text-sm text-yellow-800 font-semibold mb-1">⚠️ Important Limitation</p>
-            <p className="text-sm text-yellow-700">
-              Facebook deprecated the Groups API in 2024. <strong>You cannot comment on group posts</strong> through the API anymore. 
-              This feature only works for <strong>Page posts</strong> or <strong>your own profile posts</strong>, not group posts.
+          <div className="bg-red-50 border border-red-300 rounded-lg p-4 mb-4">
+            <p className="text-sm text-red-800 font-semibold mb-2">🚫 Group Posts Not Supported</p>
+            <p className="text-sm text-red-700 mb-2">
+              <strong>Facebook has blocked API access to group posts.</strong> Even with all permissions granted, 
+              group posts cannot be accessed or commented on through the Graph API. This is a platform limitation, not a bug.
+            </p>
+            <p className="text-sm text-red-700">
+              ✅ <strong>This app works for:</strong> Facebook Page posts and your own profile posts<br/>
+              ❌ <strong>Does NOT work for:</strong> Group posts (any group, even if you're an admin)
             </p>
           </div>
           <p className="text-sm text-gray-600 mb-4">
-            Paste a Facebook post URL (from a Page or your profile) and write a comment to post it automatically.
+            Paste a Facebook post URL from a <strong>Page</strong> or <strong>your profile</strong> (not groups) and write a comment to post it automatically.
           </p>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+            <p className="text-xs text-blue-800">
+              <strong>Example working URLs:</strong><br/>
+              • Page post: <code className="text-xs">facebook.com/{`{page-name}`}/posts/{`post-id`}</code><br/>
+              • Your post: <code className="text-xs">facebook.com/{`{your-profile-id}`}/posts/{`post-id`}</code>
+            </p>
+          </div>
           
           <div className="space-y-4">
             <div>
@@ -367,7 +378,8 @@ export default function Dashboard({ session }: DashboardProps) {
             <li>Your access token is stored securely in your session</li>
             <li>All API calls use your personal access token</li>
             <li>Multiple users can use the same app with their own tokens</li>
-            <li>Comment on Page posts or your own profile posts (group posts are not supported due to API deprecation)</li>
+            <li>Comment on Page posts or your own profile posts</li>
+            <li className="text-red-600">⚠️ Group posts are blocked by Facebook's API (not supported)</li>
           </ul>
         </div>
       </main>
