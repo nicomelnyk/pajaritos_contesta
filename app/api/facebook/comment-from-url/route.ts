@@ -53,6 +53,25 @@ function extractPostIdFromUrl(url: string): string | null {
   }
 }
 
+// Get app access token (for testing if it works differently)
+async function getAppAccessToken(): Promise<string | null> {
+  try {
+    const appId = process.env.FACEBOOK_APP_ID;
+    const appSecret = process.env.FACEBOOK_APP_SECRET;
+    if (!appId || !appSecret) return null;
+    
+    const apiVersion = process.env.FACEBOOK_API_VERSION || "v18.0";
+    const url = `https://graph.facebook.com/${apiVersion}/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&grant_type=client_credentials`;
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    return data.access_token || null;
+  } catch (e) {
+    console.error("Error getting app access token:", e);
+    return null;
+  }
+}
+
 // Post a comment on a post using URL
 export async function POST(request: NextRequest) {
   try {
@@ -147,7 +166,10 @@ export async function POST(request: NextRequest) {
 
     const url = `https://graph.facebook.com/${apiVersion}/${postId}/comments`;
 
-    const response = await fetch(url, {
+    // Try posting comment with user access token
+    // Facebook automatically marks it as "Posted by [AppName] on behalf of [User]"
+    // This is the standard way to post "on behalf of" a user
+    let response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -157,6 +179,35 @@ export async function POST(request: NextRequest) {
         access_token: session.accessToken,
       }),
     });
+
+    let data = await response.json();
+
+    // If user token fails with permission error, try app token (unlikely to work for groups, but worth trying)
+    if (data.error && (data.error.code === 10 || data.error.code === 200)) {
+      const appToken = await getAppAccessToken();
+      if (appToken) {
+        // Try with app token - this would post "as the app" rather than "on behalf of user"
+        // Note: This likely won't work for groups either, but testing it
+        const appResponse = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            message,
+            access_token: appToken,
+          }),
+        });
+        const appData = await appResponse.json();
+        
+        // If app token works, use that result
+        if (!appData.error) {
+          data = appData;
+          response = appResponse;
+        }
+        // Otherwise, continue with user token error
+      }
+    }
 
     const data = await response.json();
 
