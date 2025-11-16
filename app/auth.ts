@@ -3,6 +3,7 @@ import Facebook from "next-auth/providers/facebook";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true, // Required for Vercel deployment
+  secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET, // Support both env var names
   providers: [
     Facebook({
       clientId: process.env.FACEBOOK_APP_ID!,
