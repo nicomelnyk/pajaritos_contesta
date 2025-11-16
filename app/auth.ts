@@ -1,6 +1,20 @@
 import NextAuth from "next-auth";
 import Facebook from "next-auth/providers/facebook";
 
+// Use stable production domain or VERCEL_URL (automatically set by Vercel)
+const getBaseUrl = () => {
+  // If NEXTAUTH_URL is explicitly set, use it
+  if (process.env.NEXTAUTH_URL) return process.env.NEXTAUTH_URL;
+  
+  // Use stable production domain (doesn't change with deployments)
+  if (process.env.VERCEL) {
+    return `https://pajaritoscontesta.vercel.app`;
+  }
+  
+  // Fallback for local development
+  return process.env.NEXTAUTH_URL || "http://localhost:3000";
+};
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true, // Required for Vercel deployment
   secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET, // Support both env var names
