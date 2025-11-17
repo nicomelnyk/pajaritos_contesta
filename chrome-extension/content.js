@@ -45,11 +45,13 @@
   // Find comment input field
   function findCommentInput() {
     const selectors = [
-      'div[contenteditable="true"][role="textbox"][aria-label*="comment"]',
-      'div[contenteditable="true"][role="textbox"][aria-label*="comentar"]',
-      'div[contenteditable="true"][data-testid*="comment"]',
-      'textarea[placeholder*="comment"]',
-      'textarea[placeholder*="comentar"]'
+      'div[contenteditable="true"][role="textbox"]',
+      'div[contenteditable="true"]',
+      'div[role="textbox"][contenteditable]',
+      'textarea[placeholder*="comment" i]',
+      'textarea[placeholder*="comentar" i]',
+      'div[data-testid*="comment"]',
+      'div[data-testid*="comentar"]'
     ];
 
     for (const selector of selectors) {
