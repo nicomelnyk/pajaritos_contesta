@@ -392,11 +392,47 @@
       statusDiv.textContent = '';
       statusDiv.style.color = '';
 
-      // Click comment button first
-      const commentButton = findCommentButton(postElement);
-      if (commentButton) {
-        commentButton.click();
-        await wait(1000);
+      // Click the main post's comment button (not comment replies)
+      // Make sure we're clicking the post's comment button, not a reply button
+      const mainCommentButton = findCommentButton(postElement);
+      if (mainCommentButton) {
+        // Verify it's the main post comment button, not a reply to a comment
+        const isReplyButton = mainCommentButton.closest('[data-testid*="comment"]') !== null &&
+                             mainCommentButton.closest('[data-testid*="comment"]') !== postElement;
+        
+        if (!isReplyButton) {
+          mainCommentButton.click();
+          await wait(1000);
+        } else {
+          // If we got a reply button, find the main post's comment area
+          const mainPostActions = postElement.querySelector('div[role="group"]') || 
+                                 postElement.querySelector('div[role="toolbar"]');
+          if (mainPostActions) {
+            const mainCommentBtn = mainPostActions.querySelector('div[role="button"], span[role="button"]');
+            if (mainCommentBtn) {
+              mainCommentBtn.click();
+              await wait(1000);
+            }
+          }
+        }
+      } else {
+        // Try to find and click the main comment area directly
+        const mainPostActions = postElement.querySelector('div[role="group"]') || 
+                               postElement.querySelector('div[role="toolbar"]');
+        if (mainPostActions) {
+          // Look for "Comentar" button in the main actions
+          const buttons = mainPostActions.querySelectorAll('div[role="button"], span[role="button"]');
+          for (const btn of buttons) {
+            const text = btn.textContent?.toLowerCase() || '';
+            const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
+            if ((text.includes('comentar') || text.includes('comment')) && 
+                !text.includes('responder') && !text.includes('reply')) {
+              btn.click();
+              await wait(1000);
+              break;
+            }
+          }
+        }
       }
 
       // Post comment
@@ -433,6 +469,20 @@
     });
   }
 
+  // Check if an element is a main post (not a comment)
+  function isMainPost(element) {
+    // Comments usually have specific data attributes or are nested
+    const isComment = element.closest('[data-testid*="comment"]') !== null &&
+                     element.closest('[data-testid*="comment"]') !== element;
+    
+    // Main posts usually have these characteristics
+    const hasPostStructure = element.querySelector('div[role="group"]') !== null ||
+                            element.querySelector('div[role="toolbar"]') !== null ||
+                            element.getAttribute('data-pagelet')?.includes('FeedUnit');
+    
+    return !isComment && hasPostStructure;
+  }
+
   // Add buttons to all posts
   function addButtonsToPosts() {
     const postSelectors = [
@@ -447,25 +497,36 @@
     for (const selector of postSelectors) {
       const found = document.querySelectorAll(selector);
       if (found.length > 0) {
-        posts = found;
-        console.log(`[Pajaritos] Found ${posts.length} posts using selector: ${selector}`);
-        break;
+        // Filter to only main posts, not comments
+        posts = Array.from(found).filter(post => isMainPost(post));
+        if (posts.length > 0) {
+          console.log(`[Pajaritos] Found ${posts.length} main posts using selector: ${selector}`);
+          break;
+        }
       }
     }
 
     if (posts.length === 0) {
-      // Try a more general approach - look for posts by finding comment buttons
+      // Try a more general approach - look for posts by finding main comment buttons
+      // Only get buttons that are in the main post action area, not comment replies
       const allCommentButtons = document.querySelectorAll('div[role="button"][aria-label*="Comment"], div[role="button"][aria-label*="Comentar"]');
       console.log(`[Pajaritos] Found ${allCommentButtons.length} comment buttons`);
       
       allCommentButtons.forEach(btn => {
+        // Skip if this is a reply button (inside a comment)
+        if (btn.closest('[data-testid*="comment"]') && 
+            btn.closest('[data-testid*="comment"]') !== btn.closest('div[role="article"]')) {
+          return; // Skip comment reply buttons
+        }
+        
         // Find the post container (go up the DOM tree)
         let post = btn.closest('div[role="article"]') || 
                    btn.closest('div[data-pagelet]') ||
                    btn.closest('div[data-testid*="post"]') ||
                    btn.closest('div').parentElement?.parentElement;
         
-        if (post && !post.querySelector('.pajaritos-reply-btn')) {
+        // Make sure it's a main post
+        if (post && isMainPost(post) && !post.querySelector('.pajaritos-reply-btn')) {
           posts.push(post);
         }
       });
