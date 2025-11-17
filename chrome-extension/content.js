@@ -15,6 +15,8 @@
       'div[role="button"][aria-label*="Comentar"]',
       'div[role="button"][aria-label*="comment"]',
       'div[role="button"][aria-label*="comentar"]',
+      'span[role="button"][aria-label*="Comment"]',
+      'span[role="button"][aria-label*="Comentar"]',
       'a[href*="/comment"]',
       'a[href*="/comentar"]'
     ];
@@ -22,20 +24,46 @@
     for (const selector of selectors) {
       try {
         const button = postElement.querySelector(selector);
-        if (button) return button;
+        if (button && button.offsetParent !== null) return button;
       } catch (e) {
         console.warn('[Pajaritos] Invalid selector:', selector, e);
       }
     }
 
     // Fallback: look for buttons with text "Comment" or "Comentar"
-    const buttons = postElement.querySelectorAll('div[role="button"], a, span[role="button"]');
-    for (const button of buttons) {
-      const text = button.textContent?.toLowerCase() || '';
+    // Look in the action buttons area (usually near Like/Share buttons)
+    const actionAreas = postElement.querySelectorAll('div[role="button"], span[role="button"], a');
+    for (const button of actionAreas) {
+      if (button.offsetParent === null) continue; // Skip hidden buttons
+      
+      const text = button.textContent?.toLowerCase().trim() || '';
       const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
-      if (text.includes('comment') || text.includes('comentar') || 
-          ariaLabel.includes('comment') || ariaLabel.includes('comentar')) {
+      const title = button.getAttribute('title')?.toLowerCase() || '';
+      
+      // Check if it's a comment button
+      if (text === 'comentar' || text === 'comment' ||
+          ariaLabel.includes('comment') || ariaLabel.includes('comentar') ||
+          title.includes('comment') || title.includes('comentar')) {
         return button;
+      }
+    }
+
+    // Last resort: look for the "Comentar" text in the post's action area
+    // Facebook often has the comment button near "Me gusta" and "Compartir"
+    const allText = postElement.textContent || '';
+    if (allText.includes('Comentar') || allText.includes('Comment')) {
+      // Find the parent container that has these action buttons
+      const actionContainer = postElement.querySelector('div[role="group"]') || 
+                            postElement.querySelector('div[role="toolbar"]') ||
+                            Array.from(postElement.querySelectorAll('div')).find(div => {
+                              const txt = div.textContent?.toLowerCase() || '';
+                              return (txt.includes('me gusta') || txt.includes('like')) && 
+                                     (txt.includes('comentar') || txt.includes('comment'));
+                            });
+      
+      if (actionContainer) {
+        const commentBtn = actionContainer.querySelector('div[role="button"], span[role="button"]');
+        if (commentBtn) return commentBtn;
       }
     }
 
@@ -169,11 +197,28 @@
       return false;
     }
 
-    // Find where to insert the button (near comment button)
+    // Find where to insert the button (near comment button or action buttons)
     const commentButton = findCommentButton(postElement);
-    if (!commentButton) {
-      console.log('[Pajaritos] Comment button not found for post');
-      return false;
+    
+    // If no comment button found, try to find the action buttons area
+    let insertTarget = commentButton;
+    if (!insertTarget) {
+      // Look for the action buttons container (where Like/Comment/Share buttons are)
+      const actionContainer = postElement.querySelector('div[role="group"]') || 
+                            postElement.querySelector('div[role="toolbar"]') ||
+                            Array.from(postElement.querySelectorAll('div')).find(div => {
+                              const txt = div.textContent?.toLowerCase() || '';
+                              return (txt.includes('me gusta') || txt.includes('like')) && 
+                                     (txt.includes('compartir') || txt.includes('share'));
+                            });
+      
+      if (actionContainer) {
+        insertTarget = actionContainer;
+        console.log('[Pajaritos] Using action container as insert target');
+      } else {
+        console.log('[Pajaritos] Comment button and action area not found for post');
+        return false;
+      }
     }
 
     // Create button
@@ -211,15 +256,23 @@
       showReplyForm(postElement, replyBtn);
     });
 
-    // Insert button near comment button
-    const parent = commentButton.parentElement;
-    if (parent) {
-      parent.appendChild(replyBtn);
-      console.log('[Pajaritos] Reply button added successfully');
-      return true;
+    // Insert button near comment button or action area
+    if (insertTarget === commentButton) {
+      // Insert next to comment button
+      const parent = commentButton.parentElement;
+      if (parent) {
+        parent.appendChild(replyBtn);
+        console.log('[Pajaritos] Reply button added next to comment button');
+        return true;
+      } else {
+        commentButton.insertAdjacentElement('afterend', replyBtn);
+        console.log('[Pajaritos] Reply button added after comment button');
+        return true;
+      }
     } else {
-      commentButton.insertAdjacentElement('afterend', replyBtn);
-      console.log('[Pajaritos] Reply button added successfully (afterend)');
+      // Insert in action container
+      insertTarget.appendChild(replyBtn);
+      console.log('[Pajaritos] Reply button added to action container');
       return true;
     }
   }
