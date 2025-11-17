@@ -751,11 +751,10 @@
           return false;
         }
       }
-      // If it has post attributes and no reply input, accept it
-      if (!hasCommentButton && !hasMainPostInput && !hasActionButtons) {
-        console.log('[Pajaritos] ✅ Accepting as main post based on post attributes');
-        return true; // Accept based on post attributes alone
-      }
+      // If it has post attributes and no reply input, accept it (even without visible buttons)
+      console.log('[Pajaritos] ✅ Accepting as main post based on post attributes');
+      // Skip the remaining checks and return true immediately
+      return true;
     }
     
     // Accept if: has comment button OR has main post input OR has action buttons (and no reply input)
@@ -880,7 +879,9 @@
         // Find the post container (go up the DOM tree)
         let post = btn.closest('div[role="article"]') || 
                    btn.closest('div[data-pagelet*="FeedUnit"]') ||
-                   btn.closest('div[data-testid*="post"]');
+                   btn.closest('div[data-testid*="post"]') ||
+                   btn.closest('div[data-ad-preview="message"]') ||
+                   btn.closest('div[data-ad-comet-preview="message"]');
         
         // Make sure it's a main post
         if (post && isMainPost(post) && !post.querySelector('.pajaritos-reply-btn')) {
