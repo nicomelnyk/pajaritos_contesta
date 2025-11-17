@@ -608,21 +608,56 @@
     const hasReplyButton = element.textContent?.includes('Responder') ||
                           element.textContent?.includes('Reply') ||
                           element.querySelector('[aria-label*="Responder"]') !== null ||
-                          element.querySelector('[aria-label*="Reply"]') !== null;
+                          element.querySelector('[aria-label*="Reply"]') !== null ||
+                          element.querySelector('[aria-label*="responder"]') !== null ||
+                          element.querySelector('[aria-label*="reply"]') !== null;
     
     if (hasReplyButton) {
       console.log('[Pajaritos] ❌ Rejected: Has "Responder" button (this is a comment reply)');
       return false;
     }
     
-    // STRICT: Must have "Comentar" (Comment) button, not "Responder"
-    const hasCommentButton = element.textContent?.includes('Comentar') ||
-                             element.textContent?.includes('Comment') ||
-                             element.querySelector('[aria-label*="Comentar"]') !== null ||
-                             element.querySelector('[aria-label*="Comment"]') !== null;
+    // FLEXIBLE: Look for "Comentar" (Comment) button in multiple ways
+    // Check text content
+    const hasCommentInText = element.textContent?.includes('Comentar') ||
+                             element.textContent?.includes('Comment');
     
+    // Check for comment button using various selectors
+    const commentButtonSelectors = [
+      '[aria-label*="Comentar"]',
+      '[aria-label*="Comment"]',
+      '[aria-label*="comentar"]',
+      '[aria-label*="comment"]',
+      '[data-testid*="comment"]',
+      'div[role="button"]:has-text("Comentar")',
+      'span[role="button"]:has-text("Comentar")'
+    ];
+    
+    let hasCommentButton = hasCommentInText;
     if (!hasCommentButton) {
-      console.log('[Pajaritos] ❌ Rejected: No "Comentar" button found');
+      for (const selector of commentButtonSelectors) {
+        try {
+          if (element.querySelector(selector)) {
+            hasCommentButton = true;
+            console.log(`[Pajaritos] Found comment button with selector: ${selector}`);
+            break;
+          }
+        } catch (e) {
+          // Some selectors might not be valid (like :has-text)
+          continue;
+        }
+      }
+    }
+    
+    // Also check if there's a comment input field (main posts have these)
+    const hasCommentInput = element.querySelector('div[contenteditable="true"][placeholder*="comentario"]') !== null ||
+                           element.querySelector('div[contenteditable="true"][placeholder*="comment"]') !== null ||
+                           element.querySelector('div[contenteditable="true"][placeholder*="Comentario"]') !== null ||
+                           element.querySelector('div[contenteditable="true"][placeholder*="Comment"]') !== null;
+    
+    if (!hasCommentButton && !hasCommentInput) {
+      console.log('[Pajaritos] ❌ Rejected: No "Comentar" button or comment input found');
+      console.log('[Pajaritos] Element text preview:', element.textContent?.substring(0, 200));
       return false;
     }
     
@@ -638,7 +673,7 @@
       }
     }
     
-    // STRICT: Must have main post action buttons (Like/Comment/Share together)
+    // FLEXIBLE: Look for main post action buttons (Like/Comment/Share) - at least 2 of 3
     const actionButtons = element.querySelector('div[role="group"]') || 
                          element.querySelector('div[role="toolbar"]') ||
                          Array.from(element.querySelectorAll('div')).find(div => {
@@ -648,18 +683,29 @@
                                   (txt.includes('compartir') || txt.includes('share'));
                          });
     
-    if (!actionButtons) {
+    // Also check for at least Like + Comment or Like + Share (more flexible)
+    const hasLikeAndComment = element.textContent?.toLowerCase().includes('me gusta') && 
+                              (element.textContent?.toLowerCase().includes('comentar') || 
+                               element.textContent?.toLowerCase().includes('comment'));
+    const hasLikeAndShare = element.textContent?.toLowerCase().includes('me gusta') && 
+                           (element.textContent?.toLowerCase().includes('compartir') || 
+                            element.textContent?.toLowerCase().includes('share'));
+    
+    if (!actionButtons && !hasLikeAndComment && !hasLikeAndShare) {
       console.log('[Pajaritos] ❌ Rejected: No main post action buttons (Like/Comment/Share)');
       return false;
     }
     
-    // STRICT: Must have data-pagelet with FeedUnit OR be a top-level article
+    // FLEXIBLE: Check for FeedUnit, article, or post-like structure
     const hasFeedUnit = element.getAttribute('data-pagelet')?.includes('FeedUnit');
     const isTopLevelArticle = element.getAttribute('role') === 'article' && 
                              !element.closest('div[role="article"]');
+    const hasPostStructure = element.getAttribute('data-testid')?.includes('post') ||
+                            element.getAttribute('data-ad-preview') === 'message' ||
+                            element.getAttribute('data-ad-comet-preview') === 'message';
     
-    if (!hasFeedUnit && !isTopLevelArticle) {
-      console.log('[Pajaritos] ❌ Rejected: Not a FeedUnit or top-level article');
+    if (!hasFeedUnit && !isTopLevelArticle && !hasPostStructure) {
+      console.log('[Pajaritos] ❌ Rejected: Not a FeedUnit, top-level article, or post structure');
       return false;
     }
     
