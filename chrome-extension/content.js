@@ -48,17 +48,27 @@
       'div[contenteditable="true"][role="textbox"]',
       'div[contenteditable="true"]',
       'div[role="textbox"][contenteditable]',
-      'textarea[placeholder*="comment" i]',
-      'textarea[placeholder*="comentar" i]',
+      'textarea',
       'div[data-testid*="comment"]',
       'div[data-testid*="comentar"]'
     ];
 
     for (const selector of selectors) {
       try {
-        const input = document.querySelector(selector);
-        if (input && input.offsetParent !== null) { // Check if visible
-          return input;
+        const inputs = document.querySelectorAll(selector);
+        for (const input of inputs) {
+          // Check if it's a comment input by checking attributes or placeholder
+          const placeholder = input.getAttribute('placeholder')?.toLowerCase() || '';
+          const ariaLabel = input.getAttribute('aria-label')?.toLowerCase() || '';
+          const dataTestId = input.getAttribute('data-testid')?.toLowerCase() || '';
+          
+          if (input.offsetParent !== null && // Check if visible
+              (placeholder.includes('comment') || placeholder.includes('comentar') ||
+               ariaLabel.includes('comment') || ariaLabel.includes('comentar') ||
+               dataTestId.includes('comment') || dataTestId.includes('comentar') ||
+               selector === 'div[contenteditable="true"][role="textbox"]')) {
+            return input;
+          }
         }
       } catch (e) {
         console.warn('[Pajaritos] Invalid selector:', selector, e);
