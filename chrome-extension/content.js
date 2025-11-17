@@ -471,16 +471,25 @@
 
   // Check if an element is a main post (not a comment)
   function isMainPost(element) {
-    // Comments usually have specific data attributes or are nested
-    const isComment = element.closest('[data-testid*="comment"]') !== null &&
-                     element.closest('[data-testid*="comment"]') !== element;
+    // Skip if this element is inside a comment (nested comment)
+    const commentContainer = element.closest('[data-testid*="comment"]');
+    if (commentContainer && commentContainer !== element) {
+      // Check if the comment container is not the main post
+      const isNestedComment = commentContainer.closest('div[role="article"]') !== element;
+      if (isNestedComment) {
+        return false; // This is a comment, not a main post
+      }
+    }
     
-    // Main posts usually have these characteristics
-    const hasPostStructure = element.querySelector('div[role="group"]') !== null ||
+    // Main posts usually have action buttons (Like/Comment/Share)
+    const hasActionButtons = element.querySelector('div[role="group"]') !== null ||
                             element.querySelector('div[role="toolbar"]') !== null ||
+                            element.textContent?.includes('Me gusta') ||
+                            element.textContent?.includes('Like') ||
                             element.getAttribute('data-pagelet')?.includes('FeedUnit');
     
-    return !isComment && hasPostStructure;
+    // If it has action buttons, it's likely a main post
+    return hasActionButtons;
   }
 
   // Add buttons to all posts
@@ -498,10 +507,19 @@
       const found = document.querySelectorAll(selector);
       if (found.length > 0) {
         // Filter to only main posts, not comments
-        posts = Array.from(found).filter(post => isMainPost(post));
-        if (posts.length > 0) {
-          console.log(`[Pajaritos] Found ${posts.length} main posts using selector: ${selector}`);
+        const filtered = Array.from(found).filter(post => {
+          const isMain = isMainPost(post);
+          if (!isMain) {
+            console.log('[Pajaritos] Skipping element (not a main post):', post);
+          }
+          return isMain;
+        });
+        if (filtered.length > 0) {
+          posts = filtered;
+          console.log(`[Pajaritos] Found ${posts.length} main posts using selector: ${selector} (out of ${found.length} total)`);
           break;
+        } else {
+          console.log(`[Pajaritos] Found ${found.length} elements with selector ${selector}, but none are main posts`);
         }
       }
     }
