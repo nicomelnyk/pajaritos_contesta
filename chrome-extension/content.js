@@ -121,12 +121,11 @@
           
           const placeholder = input.getAttribute('placeholder')?.toLowerCase() || '';
           const ariaLabel = input.getAttribute('aria-label')?.toLowerCase() || '';
+          const ariaPlaceholder = input.getAttribute('aria-placeholder')?.toLowerCase() || '';
           
-          console.log(`[Pajaritos] Checking input: placeholder="${placeholder}", aria-label="${ariaLabel}"`);
+          console.log(`[Pajaritos] Checking input: placeholder="${placeholder}", aria-label="${ariaLabel}", aria-placeholder="${ariaPlaceholder}"`);
           
           // Skip if it's clearly a reply input (has "respuesta" or "reply" in placeholder/aria-label)
-          const ariaLabel = input.getAttribute('aria-label')?.toLowerCase() || '';
-          const ariaPlaceholder = input.getAttribute('aria-placeholder')?.toLowerCase() || '';
           
           if (placeholder.includes('respuesta') || placeholder.includes('reply') ||
               placeholder.includes('escribe una respuesta') ||
