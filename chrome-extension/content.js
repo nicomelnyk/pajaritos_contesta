@@ -124,11 +124,24 @@
           
           console.log(`[Pajaritos] Checking input: placeholder="${placeholder}", aria-label="${ariaLabel}"`);
           
-          // Skip if it's clearly a reply input (has "respuesta" or "reply" in placeholder)
+          // Skip if it's clearly a reply input (has "respuesta" or "reply" in placeholder/aria-label)
+          const ariaLabel = input.getAttribute('aria-label')?.toLowerCase() || '';
+          const ariaPlaceholder = input.getAttribute('aria-placeholder')?.toLowerCase() || '';
+          
           if (placeholder.includes('respuesta') || placeholder.includes('reply') ||
-              placeholder.includes('escribe una respuesta')) {
-            console.log('[Pajaritos] ⏭️ Skipping - this is a reply input');
+              placeholder.includes('escribe una respuesta') ||
+              ariaLabel.includes('respuesta') || ariaLabel.includes('reply') ||
+              ariaPlaceholder.includes('respuesta') || ariaPlaceholder.includes('reply')) {
+            console.log('[Pajaritos] ⏭️ Skipping - this is a reply input (respuesta)');
             continue; // Skip reply inputs
+          }
+          
+          // Prefer main post inputs: "comentario público" or "public comment"
+          if (placeholder.includes('comentario público') || placeholder.includes('public comment') ||
+              ariaLabel.includes('comentario público') || ariaLabel.includes('public comment') ||
+              ariaPlaceholder.includes('comentario público') || ariaPlaceholder.includes('public comment')) {
+            console.log('[Pajaritos] ✅ Found main post input by placeholder/aria-label (comentario público)');
+            return input;
           }
           
           // Check if it's in a comment reply container (nested comments)
@@ -649,14 +662,43 @@
       }
     }
     
-    // Also check if there's a comment input field (main posts have these)
-    const hasCommentInput = element.querySelector('div[contenteditable="true"][placeholder*="comentario"]') !== null ||
-                           element.querySelector('div[contenteditable="true"][placeholder*="comment"]') !== null ||
-                           element.querySelector('div[contenteditable="true"][placeholder*="Comentario"]') !== null ||
-                           element.querySelector('div[contenteditable="true"][placeholder*="Comment"]') !== null;
+    // Also check if there's a MAIN POST comment input field
+    // Main posts have "Escribe un comentario público..." (Write a public comment...)
+    // Replies have "Escribe una respuesta..." (Write a reply...)
+    const mainPostInputSelectors = [
+      'div[contenteditable="true"][aria-label*="comentario público"]',
+      'div[contenteditable="true"][aria-label*="comentario publico"]',
+      'div[contenteditable="true"][aria-label*="public comment"]',
+      'div[contenteditable="true"][aria-placeholder*="comentario público"]',
+      'div[contenteditable="true"][aria-placeholder*="comentario publico"]',
+      'div[contenteditable="true"][aria-placeholder*="public comment"]'
+    ];
     
-    if (!hasCommentButton && !hasCommentInput) {
-      console.log('[Pajaritos] ❌ Rejected: No "Comentar" button or comment input found');
+    let hasMainPostInput = false;
+    for (const selector of mainPostInputSelectors) {
+      try {
+        if (element.querySelector(selector)) {
+          hasMainPostInput = true;
+          console.log(`[Pajaritos] Found main post input with selector: ${selector}`);
+          break;
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+    
+    // Make sure it's NOT a reply input ("Escribe una respuesta")
+    const hasReplyInput = element.querySelector('div[contenteditable="true"][aria-label*="respuesta"]') !== null ||
+                         element.querySelector('div[contenteditable="true"][aria-placeholder*="respuesta"]') !== null ||
+                         element.querySelector('div[contenteditable="true"][aria-label*="reply"]') !== null;
+    
+    if (hasReplyInput) {
+      console.log('[Pajaritos] ❌ Rejected: Has reply input ("Escribe una respuesta"), not main post');
+      return false;
+    }
+    
+    if (!hasCommentButton && !hasMainPostInput) {
+      console.log('[Pajaritos] ❌ Rejected: No "Comentar" button or main post comment input found');
       console.log('[Pajaritos] Element text preview:', element.textContent?.substring(0, 200));
       return false;
     }
