@@ -9,22 +9,32 @@
 
   // Find comment button for a post
   function findCommentButton(postElement) {
+    // Try attribute-based selectors first
     const selectors = [
       'div[role="button"][aria-label*="Comment"]',
       'div[role="button"][aria-label*="Comentar"]',
-      'a[href*="/comment"]'
+      'div[role="button"][aria-label*="comment"]',
+      'div[role="button"][aria-label*="comentar"]',
+      'a[href*="/comment"]',
+      'a[href*="/comentar"]'
     ];
 
     for (const selector of selectors) {
-      const button = postElement.querySelector(selector);
-      if (button) return button;
+      try {
+        const button = postElement.querySelector(selector);
+        if (button) return button;
+      } catch (e) {
+        console.warn('[Pajaritos] Invalid selector:', selector, e);
+      }
     }
 
     // Fallback: look for buttons with text "Comment" or "Comentar"
-    const buttons = postElement.querySelectorAll('div[role="button"], a, span');
+    const buttons = postElement.querySelectorAll('div[role="button"], a, span[role="button"]');
     for (const button of buttons) {
       const text = button.textContent?.toLowerCase() || '';
-      if (text.includes('comment') || text.includes('comentar')) {
+      const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
+      if (text.includes('comment') || text.includes('comentar') || 
+          ariaLabel.includes('comment') || ariaLabel.includes('comentar')) {
         return button;
       }
     }
@@ -43,9 +53,13 @@
     ];
 
     for (const selector of selectors) {
-      const input = document.querySelector(selector);
-      if (input && input.offsetParent !== null) { // Check if visible
-        return input;
+      try {
+        const input = document.querySelector(selector);
+        if (input && input.offsetParent !== null) { // Check if visible
+          return input;
+        }
+      } catch (e) {
+        console.warn('[Pajaritos] Invalid selector:', selector, e);
       }
     }
 
