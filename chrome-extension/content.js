@@ -702,14 +702,61 @@
     }
     
     // If we have main post action buttons (Like/Comment/Share), it's likely a main post
-    // even if we can't find the comment button text
-    const hasActionButtons = element.querySelector('div[role="group"]') !== null ||
-                            element.querySelector('div[role="toolbar"]') !== null ||
-                            Array.from(element.querySelectorAll('div')).find(div => {
-                              const txt = div.textContent?.toLowerCase() || '';
-                              return (txt.includes('me gusta') || txt.includes('like')) && 
-                                     (txt.includes('compartir') || txt.includes('share'));
-                            });
+    // Look more deeply in the DOM for these buttons
+    let hasActionButtons = false;
+    
+    // Check for role="group" or role="toolbar" containers
+    const actionContainer = element.querySelector('div[role="group"]') || 
+                           element.querySelector('div[role="toolbar"]');
+    
+    if (actionContainer) {
+      hasActionButtons = true;
+      console.log('[Pajaritos] Found action buttons container (role="group" or "toolbar")');
+    } else {
+      // Look for buttons with Like/Comment/Share text anywhere in the element
+      const allDivs = element.querySelectorAll('div, span, button');
+      for (const div of allDivs) {
+        const txt = div.textContent?.toLowerCase() || '';
+        const ariaLabel = div.getAttribute('aria-label')?.toLowerCase() || '';
+        const combined = txt + ' ' + ariaLabel;
+        
+        // Check if it has Like AND (Comment OR Share)
+        const hasLike = combined.includes('me gusta') || combined.includes('like');
+        const hasComment = combined.includes('comentar') || combined.includes('comment');
+        const hasShare = combined.includes('compartir') || combined.includes('share');
+        
+        if (hasLike && (hasComment || hasShare)) {
+          hasActionButtons = true;
+          console.log('[Pajaritos] Found action buttons by text search');
+          break;
+        }
+      }
+    }
+    
+    // Also check if this element has post-like attributes (data-ad-preview="message" is a strong indicator)
+    const hasPostAttributes = element.getAttribute('data-ad-preview') === 'message' ||
+                             element.getAttribute('data-ad-comet-preview') === 'message' ||
+                             element.getAttribute('data-pagelet')?.includes('FeedUnit');
+    
+    // For group posts, if it has post attributes and no reply input, it's likely a main post
+    // even if we can't find action buttons (they might be lazy-loaded or structured differently)
+    if (hasPostAttributes && !hasReplyInput) {
+      console.log('[Pajaritos] Found post attributes (data-ad-preview="message"), treating as main post');
+      // Still check if it's nested in a comment - if so, reject it
+      const commentContainer = element.closest('[data-testid*="comment"]');
+      if (commentContainer) {
+        const parentArticle = commentContainer.closest('div[role="article"]');
+        if (parentArticle && parentArticle !== element) {
+          console.log('[Pajaritos] ❌ Rejected: Has post attributes but nested in another article');
+          return false;
+        }
+      }
+      // If it has post attributes and no reply input, accept it
+      if (!hasCommentButton && !hasMainPostInput && !hasActionButtons) {
+        console.log('[Pajaritos] ✅ Accepting as main post based on post attributes');
+        return true; // Accept based on post attributes alone
+      }
+    }
     
     // Accept if: has comment button OR has main post input OR has action buttons (and no reply input)
     if (!hasCommentButton && !hasMainPostInput && !hasActionButtons) {
