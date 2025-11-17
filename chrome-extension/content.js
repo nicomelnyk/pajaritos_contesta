@@ -154,12 +154,15 @@
   function createReplyButton(postElement) {
     // Check if button already exists
     if (postElement.querySelector('.pajaritos-reply-btn')) {
-      return;
+      return false;
     }
 
     // Find where to insert the button (near comment button)
     const commentButton = findCommentButton(postElement);
-    if (!commentButton) return;
+    if (!commentButton) {
+      console.log('[Pajaritos] Comment button not found for post');
+      return false;
+    }
 
     // Create button
     const replyBtn = document.createElement('div');
@@ -200,8 +203,12 @@
     const parent = commentButton.parentElement;
     if (parent) {
       parent.appendChild(replyBtn);
+      console.log('[Pajaritos] Reply button added successfully');
+      return true;
     } else {
       commentButton.insertAdjacentElement('afterend', replyBtn);
+      console.log('[Pajaritos] Reply button added successfully (afterend)');
+      return true;
     }
   }
 
@@ -366,20 +373,52 @@
     const postSelectors = [
       'div[data-pagelet*="FeedUnit"]',
       'div[role="article"]',
-      'div[data-testid*="post"]'
+      'div[data-testid*="post"]',
+      'div[data-ad-preview="message"]',
+      'div[data-ad-comet-preview="message"]'
     ];
 
     let posts = [];
     for (const selector of postSelectors) {
-      posts = document.querySelectorAll(selector);
-      if (posts.length > 0) break;
+      const found = document.querySelectorAll(selector);
+      if (found.length > 0) {
+        posts = found;
+        console.log(`[Pajaritos] Found ${posts.length} posts using selector: ${selector}`);
+        break;
+      }
     }
 
+    if (posts.length === 0) {
+      // Try a more general approach - look for posts by finding comment buttons
+      const allCommentButtons = document.querySelectorAll('div[role="button"][aria-label*="Comment"], div[role="button"][aria-label*="Comentar"]');
+      console.log(`[Pajaritos] Found ${allCommentButtons.length} comment buttons`);
+      
+      allCommentButtons.forEach(btn => {
+        // Find the post container (go up the DOM tree)
+        let post = btn.closest('div[role="article"]') || 
+                   btn.closest('div[data-pagelet]') ||
+                   btn.closest('div[data-testid*="post"]') ||
+                   btn.closest('div').parentElement?.parentElement;
+        
+        if (post && !post.querySelector('.pajaritos-reply-btn')) {
+          posts.push(post);
+        }
+      });
+    }
+
+    console.log(`[Pajaritos] Processing ${posts.length} posts`);
+    
+    let buttonsAdded = 0;
     posts.forEach(post => {
       if (!post.querySelector('.pajaritos-reply-btn')) {
-        createReplyButton(post);
+        const success = createReplyButton(post);
+        if (success) buttonsAdded++;
       }
     });
+    
+    if (buttonsAdded > 0) {
+      console.log(`[Pajaritos] Added ${buttonsAdded} reply buttons`);
+    }
   }
 
   // Observer for new posts
@@ -409,5 +448,13 @@
     addButtonsToPosts();
   }, 3000);
 
+  // Initial check after a delay
+  setTimeout(() => {
+    console.log('[Pajaritos Contesta] Running initial post scan...');
+    addButtonsToPosts();
+  }, 2000);
+
   console.log('[Pajaritos Contesta] Content script loaded - Manual mode');
+  console.log('[Pajaritos] Current URL:', window.location.href);
+  console.log('[Pajaritos] Ready to add reply buttons to posts');
 })();
