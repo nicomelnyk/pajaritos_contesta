@@ -70,32 +70,73 @@
     return null;
   }
 
-  // Find comment input field
-  function findCommentInput() {
+  // Find comment input field - specifically for MAIN POST, not comment replies
+  function findCommentInput(postElement) {
+    // First, try to find input in the main post's comment area
+    // Look for the main post's comment section (not nested in comments)
+    const mainPostCommentArea = postElement.querySelector('div[data-testid*="comment"]') ||
+                                Array.from(postElement.querySelectorAll('div')).find(div => {
+                                  const placeholder = div.getAttribute('placeholder')?.toLowerCase() || '';
+                                  return placeholder.includes('comentario público') || 
+                                         placeholder.includes('public comment');
+                                });
+    
+    if (mainPostCommentArea) {
+      // Look for input in this specific area
+      const input = mainPostCommentArea.querySelector('div[contenteditable="true"][role="textbox"]') ||
+                   mainPostCommentArea.querySelector('div[contenteditable="true"]') ||
+                   mainPostCommentArea.querySelector('textarea');
+      
+      if (input && input.offsetParent !== null) {
+        console.log('[Pajaritos] Found main post comment input');
+        return input;
+      }
+    }
+    
+    // Fallback: look for inputs but exclude ones that are clearly reply inputs
     const selectors = [
       'div[contenteditable="true"][role="textbox"]',
       'div[contenteditable="true"]',
       'div[role="textbox"][contenteditable]',
-      'textarea',
-      'div[data-testid*="comment"]',
-      'div[data-testid*="comentar"]'
+      'textarea'
     ];
 
     for (const selector of selectors) {
       try {
         const inputs = document.querySelectorAll(selector);
         for (const input of inputs) {
-          // Check if it's a comment input by checking attributes or placeholder
-          const placeholder = input.getAttribute('placeholder')?.toLowerCase() || '';
-          const ariaLabel = input.getAttribute('aria-label')?.toLowerCase() || '';
-          const dataTestId = input.getAttribute('data-testid')?.toLowerCase() || '';
+          if (input.offsetParent === null) continue; // Skip hidden
           
-          if (input.offsetParent !== null && // Check if visible
-              (placeholder.includes('comment') || placeholder.includes('comentar') ||
-               ariaLabel.includes('comment') || ariaLabel.includes('comentar') ||
-               dataTestId.includes('comment') || dataTestId.includes('comentar') ||
-               selector === 'div[contenteditable="true"][role="textbox"]')) {
+          // Skip if it's clearly a reply input (has "respuesta" or "reply" in placeholder)
+          const placeholder = input.getAttribute('placeholder')?.toLowerCase() || '';
+          if (placeholder.includes('respuesta') || placeholder.includes('reply')) {
+            continue; // Skip reply inputs
+          }
+          
+          // Check if it's in a comment reply container
+          const isInReply = input.closest('[data-testid*="comment"]')?.querySelector('[data-testid*="comment"]') !== null;
+          if (isInReply) {
+            continue; // Skip if nested in a comment
+          }
+          
+          // Prefer inputs with "comentario público" or "public comment"
+          if (placeholder.includes('comentario público') || placeholder.includes('public comment')) {
+            console.log('[Pajaritos] Found main post input by placeholder');
             return input;
+          }
+          
+          // Check if it's near the main post (not deep in comments)
+          const distanceFromPost = postElement.contains(input) ? 0 : 999;
+          if (distanceFromPost === 0) {
+            const ariaLabel = input.getAttribute('aria-label')?.toLowerCase() || '';
+            const dataTestId = input.getAttribute('data-testid')?.toLowerCase() || '';
+            
+            if (ariaLabel.includes('comment') || ariaLabel.includes('comentar') ||
+                dataTestId.includes('comment') || dataTestId.includes('comentar') ||
+                selector === 'div[contenteditable="true"][role="textbox"]') {
+              console.log('[Pajaritos] Found input in main post area');
+              return input;
+            }
           }
         }
       } catch (e) {
@@ -106,12 +147,12 @@
     return null;
   }
 
-  // Post a comment
-  async function postComment(commentText) {
-    const input = findCommentInput();
+  // Post a comment on the main post
+  async function postComment(commentText, postElement) {
+    const input = findCommentInput(postElement);
     if (!input) {
-      console.log('[Pajaritos] Comment input not found');
-      return { success: false, error: 'Comment input not found' };
+      console.log('[Pajaritos] Main post comment input not found');
+      return { success: false, error: 'Main post comment input not found' };
     }
 
     try {
@@ -489,8 +530,8 @@
         console.log('[Pajaritos] Main post actions not found');
       }
 
-      // Post comment
-      const result = await postComment(commentText);
+      // Post comment on the main post
+      const result = await postComment(commentText, postElement);
 
       if (result.success) {
         statusDiv.textContent = '✅ Comment posted successfully!';
