@@ -140,35 +140,88 @@
       await wait(800);
 
       // Find and click the submit button
-      const submitSelectors = [
-        'div[aria-label*="Post"][role="button"]',
-        'div[aria-label*="Publicar"][role="button"]',
-        'div[aria-label*="Comment"][role="button"]:not([aria-label*="Write"])',
-        'button[type="submit"]'
-      ];
-
+      // First, try to find button near the input (most reliable)
       let submitButton = null;
-      for (const selector of submitSelectors) {
-        const buttons = document.querySelectorAll(selector);
+      
+      // Look in the same container as the input
+      const inputContainer = input.closest('div[role="textbox"]')?.parentElement ||
+                            input.closest('form') ||
+                            input.closest('div[data-testid*="comment"]') ||
+                            input.parentElement?.parentElement;
+      
+      if (inputContainer) {
+        // Look for submit button in the container
+        const buttons = inputContainer.querySelectorAll('div[role="button"], span[role="button"], button[type="submit"], button');
         for (const btn of buttons) {
-          // Check if button is visible and near the input
-          if (btn.offsetParent !== null) {
+          if (btn.offsetParent === null) continue; // Skip hidden
+          
+          const text = btn.textContent?.toLowerCase().trim() || '';
+          const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
+          const title = btn.getAttribute('title')?.toLowerCase() || '';
+          
+          // Check if it's a submit button
+          if (text === 'publicar' || text === 'post' || 
+              ariaLabel.includes('publicar') || ariaLabel.includes('post') ||
+              title.includes('publicar') || title.includes('post') ||
+              btn.type === 'submit') {
             submitButton = btn;
+            console.log('[Pajaritos] Found submit button near input:', text || ariaLabel);
             break;
           }
         }
-        if (submitButton) break;
       }
-
-      // Fallback: look for button near the input
+      
+      // If not found, try global selectors
       if (!submitButton) {
-        const parent = input.closest('form') || input.closest('div[role="article"]') || input.parentElement;
-        const buttons = parent?.querySelectorAll('button[type="submit"], div[role="button"]');
-        if (buttons) {
-          for (const btn of buttons) {
+        const submitSelectors = [
+          'div[aria-label*="Post"][role="button"]',
+          'div[aria-label*="Publicar"][role="button"]',
+          'div[aria-label*="Comment"][role="button"]:not([aria-label*="Write"])',
+          'button[type="submit"]'
+        ];
+
+        for (const selector of submitSelectors) {
+          try {
+            const buttons = document.querySelectorAll(selector);
+            for (const btn of buttons) {
+              // Check if button is visible and near the input
+              if (btn.offsetParent !== null) {
+                // Check if it's near our input
+                const btnRect = btn.getBoundingClientRect();
+                const inputRect = input.getBoundingClientRect();
+                const distance = Math.abs(btnRect.top - inputRect.bottom);
+                
+                if (distance < 100) { // Within 100px of input
+                  submitButton = btn;
+                  console.log('[Pajaritos] Found submit button with selector:', selector);
+                  break;
+                }
+              }
+            }
+            if (submitButton) break;
+          } catch (e) {
+            console.warn('[Pajaritos] Invalid selector:', selector);
+          }
+        }
+      }
+      
+      // Last resort: look for any button with submit-like text near input
+      if (!submitButton) {
+        const allButtons = document.querySelectorAll('div[role="button"], button');
+        for (const btn of allButtons) {
+          if (btn.offsetParent === null) continue;
+          
+          const btnRect = btn.getBoundingClientRect();
+          const inputRect = input.getBoundingClientRect();
+          const distance = Math.abs(btnRect.top - inputRect.bottom);
+          
+          if (distance < 50) { // Very close to input
             const text = btn.textContent?.toLowerCase() || '';
-            if ((text.includes('post') || text.includes('publicar') || text.includes('comment') || text.includes('comentar')) && btn.offsetParent !== null) {
+            const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
+            if (text.includes('publicar') || text.includes('post') || 
+                ariaLabel.includes('publicar') || ariaLabel.includes('post')) {
               submitButton = btn;
+              console.log('[Pajaritos] Found submit button by proximity:', text || ariaLabel);
               break;
             }
           }
@@ -393,46 +446,47 @@
       statusDiv.style.color = '';
 
       // Click the main post's comment button (not comment replies)
-      // Make sure we're clicking the post's comment button, not a reply button
-      const mainCommentButton = findCommentButton(postElement);
-      if (mainCommentButton) {
-        // Verify it's the main post comment button, not a reply to a comment
-        const isReplyButton = mainCommentButton.closest('[data-testid*="comment"]') !== null &&
-                             mainCommentButton.closest('[data-testid*="comment"]') !== postElement;
+      // Find the main post's action area (where Like/Comment/Share buttons are)
+      const mainPostActions = postElement.querySelector('div[role="group"]') || 
+                             postElement.querySelector('div[role="toolbar"]') ||
+                             Array.from(postElement.querySelectorAll('div')).find(div => {
+                               const txt = div.textContent?.toLowerCase() || '';
+                               return (txt.includes('me gusta') || txt.includes('like')) && 
+                                      (txt.includes('compartir') || txt.includes('share'));
+                             });
+      
+      if (mainPostActions) {
+        // Find the "Comentar" button in the main actions (not "Responder")
+        const buttons = mainPostActions.querySelectorAll('div[role="button"], span[role="button"], a');
+        let clicked = false;
         
-        if (!isReplyButton) {
-          mainCommentButton.click();
-          await wait(1000);
-        } else {
-          // If we got a reply button, find the main post's comment area
-          const mainPostActions = postElement.querySelector('div[role="group"]') || 
-                                 postElement.querySelector('div[role="toolbar"]');
-          if (mainPostActions) {
-            const mainCommentBtn = mainPostActions.querySelector('div[role="button"], span[role="button"]');
-            if (mainCommentBtn) {
-              mainCommentBtn.click();
-              await wait(1000);
-            }
+        for (const btn of buttons) {
+          const text = btn.textContent?.toLowerCase().trim() || '';
+          const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
+          
+          // Look for main post comment button (not reply button)
+          if ((text === 'comentar' || text === 'comment' ||
+               ariaLabel.includes('comentar') || ariaLabel.includes('comment')) &&
+              !text.includes('responder') && !text.includes('reply') &&
+              !ariaLabel.includes('responder') && !ariaLabel.includes('reply')) {
+            console.log('[Pajaritos] Clicking main post comment button');
+            btn.click();
+            await wait(1500);
+            clicked = true;
+            break;
+          }
+        }
+        
+        if (!clicked) {
+          console.log('[Pajaritos] Main comment button not found, trying second button in actions');
+          // Fallback: click the second button (usually Comment is second after Like)
+          if (buttons.length >= 2) {
+            buttons[1].click();
+            await wait(1500);
           }
         }
       } else {
-        // Try to find and click the main comment area directly
-        const mainPostActions = postElement.querySelector('div[role="group"]') || 
-                               postElement.querySelector('div[role="toolbar"]');
-        if (mainPostActions) {
-          // Look for "Comentar" button in the main actions
-          const buttons = mainPostActions.querySelectorAll('div[role="button"], span[role="button"]');
-          for (const btn of buttons) {
-            const text = btn.textContent?.toLowerCase() || '';
-            const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
-            if ((text.includes('comentar') || text.includes('comment')) && 
-                !text.includes('responder') && !text.includes('reply')) {
-              btn.click();
-              await wait(1000);
-              break;
-            }
-          }
-        }
+        console.log('[Pajaritos] Main post actions not found');
       }
 
       // Post comment
