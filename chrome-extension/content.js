@@ -72,14 +72,26 @@
 
   // Find comment input field - specifically for MAIN POST, not comment replies
   function findCommentInput(postElement) {
+    console.log('[Pajaritos] Looking for main post comment input...');
+    
     // First, try to find input in the main post's comment area
     // Look for the main post's comment section (not nested in comments)
-    const mainPostCommentArea = postElement.querySelector('div[data-testid*="comment"]') ||
-                                Array.from(postElement.querySelectorAll('div')).find(div => {
-                                  const placeholder = div.getAttribute('placeholder')?.toLowerCase() || '';
-                                  return placeholder.includes('comentario público') || 
-                                         placeholder.includes('public comment');
-                                });
+    // The main post comment area should be directly in the post, not nested in comment replies
+    const allDivs = postElement.querySelectorAll('div');
+    let mainPostCommentArea = null;
+    
+    for (const div of allDivs) {
+      const placeholder = div.getAttribute('placeholder')?.toLowerCase() || '';
+      if (placeholder.includes('comentario público') || placeholder.includes('public comment')) {
+        // Check if this is NOT nested in a comment reply
+        const isInReply = div.closest('[data-testid*="comment"]')?.querySelector('[data-testid*="comment"]') !== null;
+        if (!isInReply) {
+          mainPostCommentArea = div;
+          console.log('[Pajaritos] Found main post comment area by placeholder');
+          break;
+        }
+      }
+    }
     
     if (mainPostCommentArea) {
       // Look for input in this specific area
@@ -88,7 +100,7 @@
                    mainPostCommentArea.querySelector('textarea');
       
       if (input && input.offsetParent !== null) {
-        console.log('[Pajaritos] Found main post comment input');
+        console.log('[Pajaritos] ✅ Found main post comment input in comment area');
         return input;
       }
     }
@@ -107,35 +119,52 @@
         for (const input of inputs) {
           if (input.offsetParent === null) continue; // Skip hidden
           
-          // Skip if it's clearly a reply input (has "respuesta" or "reply" in placeholder)
           const placeholder = input.getAttribute('placeholder')?.toLowerCase() || '';
-          if (placeholder.includes('respuesta') || placeholder.includes('reply')) {
+          const ariaLabel = input.getAttribute('aria-label')?.toLowerCase() || '';
+          
+          console.log(`[Pajaritos] Checking input: placeholder="${placeholder}", aria-label="${ariaLabel}"`);
+          
+          // Skip if it's clearly a reply input (has "respuesta" or "reply" in placeholder)
+          if (placeholder.includes('respuesta') || placeholder.includes('reply') ||
+              placeholder.includes('escribe una respuesta')) {
+            console.log('[Pajaritos] ⏭️ Skipping - this is a reply input');
             continue; // Skip reply inputs
           }
           
-          // Check if it's in a comment reply container
-          const isInReply = input.closest('[data-testid*="comment"]')?.querySelector('[data-testid*="comment"]') !== null;
-          if (isInReply) {
-            continue; // Skip if nested in a comment
+          // Check if it's in a comment reply container (nested comments)
+          const commentContainer = input.closest('[data-testid*="comment"]');
+          if (commentContainer) {
+            // Check if this comment container is itself inside another comment
+            const parentComment = commentContainer.parentElement?.closest('[data-testid*="comment"]');
+            if (parentComment) {
+              console.log('[Pajaritos] ⏭️ Skipping - input is nested in a comment reply');
+              continue; // Skip if nested in a comment
+            }
           }
           
           // Prefer inputs with "comentario público" or "public comment"
           if (placeholder.includes('comentario público') || placeholder.includes('public comment')) {
-            console.log('[Pajaritos] Found main post input by placeholder');
+            console.log('[Pajaritos] ✅ Found main post input by placeholder (comentario público)');
             return input;
           }
           
-          // Check if it's near the main post (not deep in comments)
-          const distanceFromPost = postElement.contains(input) ? 0 : 999;
-          if (distanceFromPost === 0) {
-            const ariaLabel = input.getAttribute('aria-label')?.toLowerCase() || '';
-            const dataTestId = input.getAttribute('data-testid')?.toLowerCase() || '';
+          // Check if it's in the main post (not deep in comments)
+          if (postElement.contains(input)) {
+            // Make sure it's not too deep (not in a nested comment structure)
+            let depth = 0;
+            let current = input.parentElement;
+            while (current && current !== postElement && depth < 10) {
+              if (current.getAttribute('data-testid')?.includes('comment')) {
+                depth++;
+              }
+              current = current.parentElement;
+            }
             
-            if (ariaLabel.includes('comment') || ariaLabel.includes('comentar') ||
-                dataTestId.includes('comment') || dataTestId.includes('comentar') ||
-                selector === 'div[contenteditable="true"][role="textbox"]') {
-              console.log('[Pajaritos] Found input in main post area');
+            if (depth <= 1) { // Only 1 level deep max (main post -> comment area)
+              console.log('[Pajaritos] ✅ Found input in main post area (depth: ' + depth + ')');
               return input;
+            } else {
+              console.log('[Pajaritos] ⏭️ Skipping - input too deep in comment structure (depth: ' + depth + ')');
             }
           }
         }
@@ -499,18 +528,24 @@
       if (mainPostActions) {
         // Find the "Comentar" button in the main actions (not "Responder")
         const buttons = mainPostActions.querySelectorAll('div[role="button"], span[role="button"], a');
-        let clicked = false;
+        console.log(`[Pajaritos] Found ${buttons.length} buttons in main post actions`);
         
-        for (const btn of buttons) {
+        let clicked = false;
+        for (let i = 0; i < buttons.length; i++) {
+          const btn = buttons[i];
           const text = btn.textContent?.toLowerCase().trim() || '';
           const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
+          
+          console.log(`[Pajaritos] Button ${i}: text="${text}", aria-label="${ariaLabel}"`);
           
           // Look for main post comment button (not reply button)
           if ((text === 'comentar' || text === 'comment' ||
                ariaLabel.includes('comentar') || ariaLabel.includes('comment')) &&
               !text.includes('responder') && !text.includes('reply') &&
               !ariaLabel.includes('responder') && !ariaLabel.includes('reply')) {
-            console.log('[Pajaritos] Clicking main post comment button');
+            console.log('[Pajaritos] ✅ Clicking main post comment button (button ' + i + ')');
+            btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            await wait(300);
             btn.click();
             await wait(1500);
             clicked = true;
@@ -519,15 +554,18 @@
         }
         
         if (!clicked) {
-          console.log('[Pajaritos] Main comment button not found, trying second button in actions');
+          console.log('[Pajaritos] Main comment button not found by text, trying second button in actions');
           // Fallback: click the second button (usually Comment is second after Like)
           if (buttons.length >= 2) {
+            console.log('[Pajaritos] Clicking button 1 (usually Comment)');
+            buttons[1].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            await wait(300);
             buttons[1].click();
             await wait(1500);
           }
         }
       } else {
-        console.log('[Pajaritos] Main post actions not found');
+        console.log('[Pajaritos] ❌ Main post actions not found');
       }
 
       // Post comment on the main post
