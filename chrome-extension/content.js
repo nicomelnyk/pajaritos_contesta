@@ -629,33 +629,49 @@
       return false;
     }
     
+    // Make sure it's NOT a reply input ("Escribe una respuesta") - this is the STRICTEST check
+    const hasReplyInput = element.querySelector('div[contenteditable="true"][aria-label*="respuesta"]') !== null ||
+                         element.querySelector('div[contenteditable="true"][aria-placeholder*="respuesta"]') !== null ||
+                         element.querySelector('div[contenteditable="true"][aria-label*="reply"]') !== null ||
+                         element.textContent?.includes('Escribe una respuesta');
+    
+    if (hasReplyInput) {
+      console.log('[Pajaritos] ❌ Rejected: Has reply input ("Escribe una respuesta"), not main post');
+      return false;
+    }
+    
     // FLEXIBLE: Look for "Comentar" (Comment) button in multiple ways
     // Check text content
     const hasCommentInText = element.textContent?.includes('Comentar') ||
                              element.textContent?.includes('Comment');
     
-    // Check for comment button using various selectors
+    // Check for comment button using various selectors (including aria-label)
     const commentButtonSelectors = [
       '[aria-label*="Comentar"]',
       '[aria-label*="Comment"]',
       '[aria-label*="comentar"]',
       '[aria-label*="comment"]',
-      '[data-testid*="comment"]',
-      'div[role="button"]:has-text("Comentar")',
-      'span[role="button"]:has-text("Comentar")'
+      'div[role="button"][aria-label*="Comentar"]',
+      'div[role="button"][aria-label*="Comment"]',
+      'span[role="button"][aria-label*="Comentar"]',
+      'span[role="button"][aria-label*="Comment"]'
     ];
     
     let hasCommentButton = hasCommentInText;
     if (!hasCommentButton) {
       for (const selector of commentButtonSelectors) {
         try {
-          if (element.querySelector(selector)) {
-            hasCommentButton = true;
-            console.log(`[Pajaritos] Found comment button with selector: ${selector}`);
-            break;
+          const btn = element.querySelector(selector);
+          if (btn) {
+            // Make sure it's not a reply button
+            const btnLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
+            if (!btnLabel.includes('responder') && !btnLabel.includes('reply')) {
+              hasCommentButton = true;
+              console.log(`[Pajaritos] Found comment button with selector: ${selector}`);
+              break;
+            }
           }
         } catch (e) {
-          // Some selectors might not be valid (like :has-text)
           continue;
         }
       }
@@ -663,7 +679,6 @@
     
     // Also check if there's a MAIN POST comment input field
     // Main posts have "Escribe un comentario público..." (Write a public comment...)
-    // Replies have "Escribe una respuesta..." (Write a reply...)
     const mainPostInputSelectors = [
       'div[contenteditable="true"][aria-label*="comentario público"]',
       'div[contenteditable="true"][aria-label*="comentario publico"]',
@@ -686,18 +701,19 @@
       }
     }
     
-    // Make sure it's NOT a reply input ("Escribe una respuesta")
-    const hasReplyInput = element.querySelector('div[contenteditable="true"][aria-label*="respuesta"]') !== null ||
-                         element.querySelector('div[contenteditable="true"][aria-placeholder*="respuesta"]') !== null ||
-                         element.querySelector('div[contenteditable="true"][aria-label*="reply"]') !== null;
+    // If we have main post action buttons (Like/Comment/Share), it's likely a main post
+    // even if we can't find the comment button text
+    const hasActionButtons = element.querySelector('div[role="group"]') !== null ||
+                            element.querySelector('div[role="toolbar"]') !== null ||
+                            Array.from(element.querySelectorAll('div')).find(div => {
+                              const txt = div.textContent?.toLowerCase() || '';
+                              return (txt.includes('me gusta') || txt.includes('like')) && 
+                                     (txt.includes('compartir') || txt.includes('share'));
+                            });
     
-    if (hasReplyInput) {
-      console.log('[Pajaritos] ❌ Rejected: Has reply input ("Escribe una respuesta"), not main post');
-      return false;
-    }
-    
-    if (!hasCommentButton && !hasMainPostInput) {
-      console.log('[Pajaritos] ❌ Rejected: No "Comentar" button or main post comment input found');
+    // Accept if: has comment button OR has main post input OR has action buttons (and no reply input)
+    if (!hasCommentButton && !hasMainPostInput && !hasActionButtons) {
+      console.log('[Pajaritos] ❌ Rejected: No "Comentar" button, main post input, or action buttons found');
       console.log('[Pajaritos] Element text preview:', element.textContent?.substring(0, 200));
       return false;
     }
