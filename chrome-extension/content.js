@@ -471,25 +471,31 @@
 
   // Check if an element is a main post (not a comment)
   function isMainPost(element) {
-    // Skip if this element is inside a comment (nested comment)
+    // Skip if this element is clearly inside a comment reply
     const commentContainer = element.closest('[data-testid*="comment"]');
-    if (commentContainer && commentContainer !== element) {
-      // Check if the comment container is not the main post
-      const isNestedComment = commentContainer.closest('div[role="article"]') !== element;
-      if (isNestedComment) {
-        return false; // This is a comment, not a main post
+    if (commentContainer) {
+      // If we're inside a comment container, check if it's nested in another article
+      const parentArticle = commentContainer.closest('div[role="article"]');
+      if (parentArticle && parentArticle !== element) {
+        // This is a comment nested inside another post - skip it
+        return false;
       }
     }
     
-    // Main posts usually have action buttons (Like/Comment/Share)
+    // Main posts usually have:
+    // 1. Action buttons area (Like/Comment/Share)
+    // 2. Or data-pagelet with FeedUnit
+    // 3. Or text content with "Me gusta" or "Like"
     const hasActionButtons = element.querySelector('div[role="group"]') !== null ||
-                            element.querySelector('div[role="toolbar"]') !== null ||
-                            element.textContent?.includes('Me gusta') ||
-                            element.textContent?.includes('Like') ||
-                            element.getAttribute('data-pagelet')?.includes('FeedUnit');
+                            element.querySelector('div[role="toolbar"]') !== null;
+    const hasFeedUnit = element.getAttribute('data-pagelet')?.includes('FeedUnit');
+    const hasPostText = element.textContent?.includes('Me gusta') ||
+                       element.textContent?.includes('Like') ||
+                       element.textContent?.includes('Compartir') ||
+                       element.textContent?.includes('Share');
     
-    // If it has action buttons, it's likely a main post
-    return hasActionButtons;
+    // If it has any of these, it's likely a main post
+    return hasActionButtons || hasFeedUnit || hasPostText;
   }
 
   // Add buttons to all posts
