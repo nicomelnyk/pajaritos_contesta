@@ -1,94 +1,81 @@
-// Popup script for managing rules and settings
+// Popup script for showing success notifications
 
 document.addEventListener('DOMContentLoaded', () => {
-  const toggle = document.getElementById('toggle');
-  const rulesList = document.getElementById('rulesList');
-  const addRuleBtn = document.getElementById('addRule');
+  const statusList = document.getElementById('statusList');
+  const clearBtn = document.getElementById('clearBtn');
 
-  // Load current settings
-  chrome.storage.sync.get(['enabled', 'rules'], (result) => {
-    const isEnabled = result.enabled || false;
-    const rules = result.rules || [];
+  // Load status history
+  function loadStatusHistory() {
+    chrome.storage.local.get(['commentHistory'], (result) => {
+      const history = result.commentHistory || [];
+      
+      if (history.length === 0) {
+        statusList.innerHTML = `
+          <div style="color: #65676b; font-size: 13px; text-align: center; padding: 20px 0;">
+            No comments posted yet.<br>
+            Click "🐦 Reply" on any Facebook post to get started!
+          </div>
+        `;
+        clearBtn.style.display = 'none';
+        return;
+      }
 
-    // Set toggle state
-    if (isEnabled) {
-      toggle.classList.add('active');
-    }
-
-    // Render rules
-    renderRules(rules);
-  });
-
-  // Toggle on/off
-  toggle.addEventListener('click', () => {
-    const isActive = toggle.classList.contains('active');
-    const newState = !isActive;
-
-    toggle.classList.toggle('active');
-    chrome.storage.sync.set({ enabled: newState }, () => {
-      console.log('Extension', newState ? 'enabled' : 'disabled');
+      clearBtn.style.display = 'block';
+      
+      // Show last 5 items
+      const recentHistory = history.slice(-5).reverse();
+      
+      statusList.innerHTML = recentHistory.map(item => {
+        const time = new Date(item.timestamp);
+        const timeStr = time.toLocaleTimeString();
+        const dateStr = time.toLocaleDateString();
+        
+        return `
+          <div class="status-item">
+            <div class="${item.success ? 'status-success' : 'status-error'}">
+              ${item.success ? '✅' : '❌'} ${item.message || 'Comment posted'}
+            </div>
+            <div class="status-time">${dateStr} at ${timeStr}</div>
+          </div>
+        `;
+      }).join('');
     });
-  });
-
-  // Add rule button
-  addRuleBtn.addEventListener('click', () => {
-    const name = prompt('Rule name:');
-    if (!name) return;
-
-    const keywords = prompt('Keywords (comma-separated):');
-    if (!keywords) return;
-
-    const response = prompt('Response message:');
-    if (!response) return;
-
-    chrome.storage.sync.get(['rules'], (result) => {
-      const rules = result.rules || [];
-      rules.push({
-        id: Date.now(),
-        name: name,
-        keywords: keywords.split(',').map(k => k.trim()),
-        response: response,
-        enabled: true
-      });
-
-      chrome.storage.sync.set({ rules }, () => {
-        renderRules(rules);
-      });
-    });
-  });
-
-  // Render rules list
-  function renderRules(rules) {
-    if (rules.length === 0) {
-      rulesList.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No rules yet. Add one to get started!</div>';
-      return;
-    }
-
-    rulesList.innerHTML = rules.map(rule => `
-      <div class="rule-item">
-        <div class="rule-header">
-          <span class="rule-name">${rule.name}</span>
-          <button class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;" onclick="deleteRule(${rule.id})">Delete</button>
-        </div>
-        <div class="rule-keywords">
-          <strong>Keywords:</strong> ${rule.keywords.join(', ')}
-        </div>
-        <div class="rule-response">
-          <strong>Response:</strong> ${rule.response}
-        </div>
-      </div>
-    `).join('');
   }
 
-  // Delete rule (needs to be global for onclick)
-  window.deleteRule = (ruleId) => {
-    chrome.storage.sync.get(['rules'], (result) => {
-      const rules = result.rules || [];
-      const filtered = rules.filter(r => r.id !== ruleId);
-      chrome.storage.sync.set({ rules: filtered }, () => {
-        renderRules(filtered);
-      });
+  // Clear history
+  clearBtn.addEventListener('click', () => {
+    chrome.storage.local.set({ commentHistory: [] }, () => {
+      loadStatusHistory();
     });
-  };
-});
+  });
 
+  // Listen for new comments
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'comment_success') {
+      // Add to history
+      chrome.storage.local.get(['commentHistory'], (result) => {
+        const history = result.commentHistory || [];
+        history.push({
+          success: true,
+          message: message.message,
+          timestamp: Date.now()
+        });
+        
+        // Keep only last 50 items
+        if (history.length > 50) {
+          history.shift();
+        }
+        
+        chrome.storage.local.set({ commentHistory: history }, () => {
+          loadStatusHistory();
+        });
+      });
+    }
+  });
+
+  // Load on open
+  loadStatusHistory();
+  
+  // Refresh every 2 seconds to catch new messages
+  setInterval(loadStatusHistory, 2000);
+});
