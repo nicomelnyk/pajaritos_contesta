@@ -10,16 +10,33 @@
   // Find comment button for a post
   function findCommentButton(postElement) {
     console.log('[Pajaritos] Looking for comment button in post...');
+    console.log('[Pajaritos] Post element:', postElement);
+    
+    // First, try to find the button in the post element or its parent
+    // Sometimes the post element is just the message container, and buttons are in a sibling/parent
+    let searchRoot = postElement;
+    
+    // Try parent element if post element doesn't have buttons
+    const parent = postElement.parentElement;
+    if (parent) {
+      // Check if parent has the buttons
+      const parentHasButtons = parent.querySelector('div[data-ad-rendering-role="comment_button"]') ||
+                               parent.querySelector('div[role="button"][aria-label="Dejar un comentario"]');
+      if (parentHasButtons) {
+        console.log('[Pajaritos] Buttons found in parent, using parent as search root');
+        searchRoot = parent;
+      }
+    }
     
     // Try data-ad-rendering-role="comment_button" first (most reliable)
-    const byDataRole = postElement.querySelector('div[data-ad-rendering-role="comment_button"]')?.closest('div[role="button"]');
+    const byDataRole = searchRoot.querySelector('div[data-ad-rendering-role="comment_button"]')?.closest('div[role="button"]');
     if (byDataRole) {
       console.log('[Pajaritos] Found comment button by data-ad-rendering-role="comment_button"');
       return byDataRole;
     }
     
     // Try aria-label="Dejar un comentario" (main post comment button)
-    const byAriaLabel = postElement.querySelector('div[role="button"][aria-label="Dejar un comentario"]');
+    const byAriaLabel = searchRoot.querySelector('div[role="button"][aria-label="Dejar un comentario"]');
     if (byAriaLabel) {
       console.log('[Pajaritos] Found comment button by aria-label="Dejar un comentario"');
       return byAriaLabel;
@@ -33,7 +50,7 @@
       return exactMatch;
     }
     
-    // Try attribute-based selectors
+    // Try attribute-based selectors (search in both post and parent)
     const selectors = [
       'div[role="button"][aria-label*="Dejar un comentario"]',
       'div[role="button"][aria-label*="Comment"]',
@@ -48,7 +65,7 @@
 
     for (const selector of selectors) {
       try {
-        const button = postElement.querySelector(selector);
+        const button = searchRoot.querySelector(selector);
         if (button) {
           // Don't check offsetParent for disabled buttons - they might still be visible
           // Just check if it exists and has the right aria-label
@@ -68,7 +85,7 @@
 
     // Fallback: look for buttons with text "Comment" or "Comentar"
     // Look in the action buttons area (usually near Like/Share buttons)
-    const actionAreas = postElement.querySelectorAll('div[role="button"], span[role="button"], a');
+    const actionAreas = searchRoot.querySelectorAll('div[role="button"], span[role="button"], a');
     for (const button of actionAreas) {
       if (button.offsetParent === null) continue; // Skip hidden buttons
       
@@ -86,12 +103,12 @@
 
     // Last resort: look for the "Comentar" text in the post's action area
     // Facebook often has the comment button near "Me gusta" and "Compartir"
-    const allText = postElement.textContent || '';
+    const allText = searchRoot.textContent || '';
     if (allText.includes('Comentar') || allText.includes('Comment')) {
       // Find the parent container that has these action buttons
-      const actionContainer = postElement.querySelector('div[role="group"]') || 
-                            postElement.querySelector('div[role="toolbar"]') ||
-                            Array.from(postElement.querySelectorAll('div')).find(div => {
+      const actionContainer = searchRoot.querySelector('div[role="group"]') || 
+                            searchRoot.querySelector('div[role="toolbar"]') ||
+                            Array.from(searchRoot.querySelectorAll('div')).find(div => {
                               const txt = div.textContent?.toLowerCase() || '';
                               return (txt.includes('me gusta') || txt.includes('like')) && 
                                      (txt.includes('comentar') || txt.includes('comment'));
@@ -381,7 +398,19 @@
       console.log('[Pajaritos] No comment button, looking for action container...');
       // Look for the action buttons container (where Like/Comment/Share buttons are)
       // First, try to find container with data-ad-rendering-role="comment_button"
-      const commentButtonElement = postElement.querySelector('div[data-ad-rendering-role="comment_button"]');
+      // Search in both post element and its parent
+      let searchRoot = postElement;
+      const parent = postElement.parentElement;
+      if (parent) {
+        const parentHasButtons = parent.querySelector('div[data-ad-rendering-role="comment_button"]') ||
+                                 parent.querySelector('div[role="button"][aria-label*="Comentar"]');
+        if (parentHasButtons) {
+          searchRoot = parent;
+          console.log('[Pajaritos] Action buttons found in parent, using parent for search');
+        }
+      }
+      
+      const commentButtonElement = searchRoot.querySelector('div[data-ad-rendering-role="comment_button"]');
       let actionContainer = null;
       
       if (commentButtonElement) {
@@ -389,14 +418,15 @@
         actionContainer = commentButtonElement.closest('div.x9f619.x1n2onr6.x1ja2u2z.x78zum5') ||
                          commentButtonElement.closest('div.xbmvrgn.x1diwwjn') ||
                          commentButtonElement.closest('div');
+        console.log('[Pajaritos] Found action container via comment button element');
       }
       
       // If not found, try other selectors
       if (!actionContainer) {
-        actionContainer = postElement.querySelector('div[role="group"]') || 
-                         postElement.querySelector('div[role="toolbar"]') ||
+        actionContainer = searchRoot.querySelector('div[role="group"]') || 
+                         searchRoot.querySelector('div[role="toolbar"]') ||
                          // Look for container with "Me gusta" and "Comentar" text
-                         Array.from(postElement.querySelectorAll('div')).find(div => {
+                         Array.from(searchRoot.querySelectorAll('div')).find(div => {
                            const txt = div.textContent?.toLowerCase() || '';
                            return (txt.includes('me gusta') || txt.includes('like')) && 
                                   (txt.includes('comentar') || txt.includes('comment')) &&
@@ -408,12 +438,19 @@
         insertTarget = actionContainer;
         console.log('[Pajaritos] ✅ Using action container as insert target');
       } else {
-        // Last resort: find any container with "Comentar" text
+        // Last resort: find any container with "Comentar" text (search in post and parent)
         console.log('[Pajaritos] Action container not found, trying fallback...');
-        const fallbackContainer = Array.from(postElement.querySelectorAll('div')).find(div => {
+        let fallbackContainer = Array.from(postElement.querySelectorAll('div')).find(div => {
           const txt = div.textContent?.toLowerCase() || '';
           return txt.includes('comentar') && txt.includes('compartir');
         });
+        
+        if (!fallbackContainer && parent) {
+          fallbackContainer = Array.from(parent.querySelectorAll('div')).find(div => {
+            const txt = div.textContent?.toLowerCase() || '';
+            return txt.includes('comentar') && txt.includes('compartir');
+          });
+        }
         
         if (fallbackContainer) {
           insertTarget = fallbackContainer;
