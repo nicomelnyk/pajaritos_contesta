@@ -512,7 +512,6 @@
 
     // Insert button near comment button or action area
     if (insertTarget === commentButton) {
-      console.log('[Pajaritos] Inserting button next to comment button...');
       // Insert next to comment button
       const parent = commentButton.parentElement;
       if (parent) {
@@ -872,60 +871,18 @@
     
     // Accept if: has comment button OR has main post input OR has action buttons (and no reply input)
     if (!hasCommentButton && !hasMainPostInput && !hasActionButtons) {
-      console.log('[Pajaritos] ❌ Rejected: No "Comentar" button, main post input, or action buttons found');
-      console.log('[Pajaritos] Element text preview:', element.textContent?.substring(0, 200));
       return false;
     }
     
     // STRICT: Must NOT be nested inside a comment structure
-    // Check if this element is inside a comment container that's itself inside another article
     const commentContainer = element.closest('[data-testid*="comment"]');
     if (commentContainer) {
-      // Check if this comment container is nested inside another post/article
       const parentArticle = commentContainer.closest('div[role="article"]');
       if (parentArticle && parentArticle !== element) {
-        console.log('[Pajaritos] ❌ Rejected: Nested inside another article (this is a comment)');
         return false;
       }
     }
     
-    // FLEXIBLE: Look for main post action buttons (Like/Comment/Share) - at least 2 of 3
-    const actionButtons = element.querySelector('div[role="group"]') || 
-                         element.querySelector('div[role="toolbar"]') ||
-                         Array.from(element.querySelectorAll('div')).find(div => {
-                           const txt = div.textContent?.toLowerCase() || '';
-                           return (txt.includes('me gusta') || txt.includes('like')) && 
-                                  (txt.includes('comentar') || txt.includes('comment')) &&
-                                  (txt.includes('compartir') || txt.includes('share'));
-                         });
-    
-    // Also check for at least Like + Comment or Like + Share (more flexible)
-    const hasLikeAndComment = element.textContent?.toLowerCase().includes('me gusta') && 
-                              (element.textContent?.toLowerCase().includes('comentar') || 
-                               element.textContent?.toLowerCase().includes('comment'));
-    const hasLikeAndShare = element.textContent?.toLowerCase().includes('me gusta') && 
-                           (element.textContent?.toLowerCase().includes('compartir') || 
-                            element.textContent?.toLowerCase().includes('share'));
-    
-    if (!actionButtons && !hasLikeAndComment && !hasLikeAndShare) {
-      console.log('[Pajaritos] ❌ Rejected: No main post action buttons (Like/Comment/Share)');
-      return false;
-    }
-    
-    // FLEXIBLE: Check for FeedUnit, article, or post-like structure
-    const hasFeedUnit = element.getAttribute('data-pagelet')?.includes('FeedUnit');
-    const isTopLevelArticle = element.getAttribute('role') === 'article' && 
-                             !element.closest('div[role="article"]');
-    const hasPostStructure = element.getAttribute('data-testid')?.includes('post') ||
-                            element.getAttribute('data-ad-preview') === 'message' ||
-                            element.getAttribute('data-ad-comet-preview') === 'message';
-    
-    if (!hasFeedUnit && !isTopLevelArticle && !hasPostStructure) {
-      console.log('[Pajaritos] ❌ Rejected: Not a FeedUnit, top-level article, or post structure');
-      return false;
-    }
-    
-    console.log('[Pajaritos] ✅ This is a main post!');
     return true;
   }
 
@@ -943,32 +900,18 @@
     for (const selector of postSelectors) {
       const found = document.querySelectorAll(selector);
       if (found.length > 0) {
-        console.log(`[Pajaritos] Found ${found.length} elements with selector: ${selector}`);
         // Filter to only main posts, not comments
-        const filtered = Array.from(found).filter(post => {
-          const isMain = isMainPost(post);
-          if (!isMain) {
-            console.log('[Pajaritos] Skipping element (not a main post):', post);
-          } else {
-            console.log('[Pajaritos] ✅ Accepted as main post:', post);
-          }
-          return isMain;
-        });
+        const filtered = Array.from(found).filter(post => isMainPost(post));
         if (filtered.length > 0) {
           posts = filtered;
-          console.log(`[Pajaritos] Found ${posts.length} main posts using selector: ${selector} (out of ${found.length} total)`);
           break;
-        } else {
-          console.log(`[Pajaritos] Found ${found.length} elements with selector ${selector}, but none are main posts`);
         }
       }
     }
 
     if (posts.length === 0) {
       // Try a more general approach - look for posts by finding main comment buttons
-      // Only get buttons that are in the main post action area, not comment replies
       const allCommentButtons = document.querySelectorAll('div[role="button"][aria-label*="Comment"], div[role="button"][aria-label*="Comentar"]');
-      console.log(`[Pajaritos] Found ${allCommentButtons.length} comment buttons`);
       
       allCommentButtons.forEach(btn => {
         const btnText = btn.textContent?.toLowerCase() || '';
@@ -977,17 +920,14 @@
         // STRICT: Only process "Comentar" buttons, NOT "Responder" buttons
         if (btnText.includes('responder') || btnText.includes('reply') ||
             btnAriaLabel.includes('responder') || btnAriaLabel.includes('reply')) {
-          console.log('[Pajaritos] Skipping "Responder" button');
           return; // Skip reply buttons
         }
         
         // Skip if this button is inside a comment structure
         const commentContainer = btn.closest('[data-testid*="comment"]');
         if (commentContainer) {
-          // Check if this comment is nested inside another article
           const parentArticle = commentContainer.closest('div[role="article"]');
           if (parentArticle) {
-            console.log('[Pajaritos] Skipping comment button inside nested comment');
             return; // Skip comment reply buttons
           }
         }
@@ -1001,16 +941,12 @@
         
         // Make sure it's a main post
         if (post && isMainPost(post) && !post.querySelector('.pajaritos-reply-btn')) {
-          console.log('[Pajaritos] Found main post via comment button');
           posts.push(post);
         }
       });
     }
-
-    console.log(`[Pajaritos] Processing ${posts.length} posts`);
     
     if (posts.length === 0) {
-      console.log('[Pajaritos] ⚠️ No posts to process!');
       return;
     }
     
