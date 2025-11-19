@@ -363,17 +363,22 @@
 
   // Create reply button for a post
   function createReplyButton(postElement) {
+    console.log('[Pajaritos] createReplyButton called for post element');
+    
     // Check if button already exists
     if (postElement.querySelector('.pajaritos-reply-btn')) {
+      console.log('[Pajaritos] Button already exists, skipping');
       return false;
     }
 
     // Find where to insert the button (near comment button or action buttons)
     const commentButton = findCommentButton(postElement);
+    console.log('[Pajaritos] Comment button found:', commentButton ? 'YES' : 'NO');
     
     // If no comment button found, try to find the action buttons area
     let insertTarget = commentButton;
     if (!insertTarget) {
+      console.log('[Pajaritos] No comment button, looking for action container...');
       // Look for the action buttons container (where Like/Comment/Share buttons are)
       // First, try to find container with data-ad-rendering-role="comment_button"
       const commentButtonElement = postElement.querySelector('div[data-ad-rendering-role="comment_button"]');
@@ -401,9 +406,10 @@
       
       if (actionContainer) {
         insertTarget = actionContainer;
-        console.log('[Pajaritos] Using action container as insert target');
+        console.log('[Pajaritos] ✅ Using action container as insert target');
       } else {
         // Last resort: find any container with "Comentar" text
+        console.log('[Pajaritos] Action container not found, trying fallback...');
         const fallbackContainer = Array.from(postElement.querySelectorAll('div')).find(div => {
           const txt = div.textContent?.toLowerCase() || '';
           return txt.includes('comentar') && txt.includes('compartir');
@@ -411,12 +417,16 @@
         
         if (fallbackContainer) {
           insertTarget = fallbackContainer;
-          console.log('[Pajaritos] Using fallback container with Comentar/Compartir');
+          console.log('[Pajaritos] ✅ Using fallback container with Comentar/Compartir');
         } else {
-          console.log('[Pajaritos] Comment button and action area not found for post');
+          console.log('[Pajaritos] ❌ Comment button and action area not found for post');
+          console.log('[Pajaritos] Post element:', postElement);
+          console.log('[Pajaritos] Post text preview:', postElement.textContent?.substring(0, 300));
           return false;
         }
       }
+    } else {
+      console.log('[Pajaritos] ✅ Using comment button as insert target');
     }
 
     // Create button
@@ -456,22 +466,29 @@
 
     // Insert button near comment button or action area
     if (insertTarget === commentButton) {
+      console.log('[Pajaritos] Inserting button next to comment button...');
       // Insert next to comment button
       const parent = commentButton.parentElement;
       if (parent) {
         parent.appendChild(replyBtn);
-        console.log('[Pajaritos] Reply button added next to comment button');
+        console.log('[Pajaritos] ✅ Reply button added next to comment button');
         return true;
       } else {
         commentButton.insertAdjacentElement('afterend', replyBtn);
-        console.log('[Pajaritos] Reply button added after comment button');
+        console.log('[Pajaritos] ✅ Reply button added after comment button');
         return true;
       }
     } else {
+      console.log('[Pajaritos] Inserting button in action container...');
       // Insert in action container
-      insertTarget.appendChild(replyBtn);
-      console.log('[Pajaritos] Reply button added to action container');
-      return true;
+      try {
+        insertTarget.appendChild(replyBtn);
+        console.log('[Pajaritos] ✅ Reply button added to action container');
+        return true;
+      } catch (e) {
+        console.error('[Pajaritos] ❌ Error inserting button:', e);
+        return false;
+      }
     }
   }
 
