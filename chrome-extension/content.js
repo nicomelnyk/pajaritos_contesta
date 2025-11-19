@@ -9,8 +9,7 @@
 
   // Find comment button for a post
   function findCommentButton(postElement) {
-    console.log('[Pajaritos] Looking for comment button in post...');
-    console.log('[Pajaritos] Post element:', postElement);
+    // Looking for comment button in post
     
     // First, try to find the button in the post element or its parent
     // Sometimes the post element is just the message container, and buttons are in a sibling/parent
@@ -23,7 +22,7 @@
       const parentHasButtons = parent.querySelector('div[data-ad-rendering-role="comment_button"]') ||
                                parent.querySelector('div[role="button"][aria-label="Dejar un comentario"]');
       if (parentHasButtons) {
-        console.log('[Pajaritos] Buttons found in parent, using parent as search root');
+        // Buttons found in parent, using parent as search root
         searchRoot = parent;
       }
     }
@@ -31,14 +30,12 @@
     // Try data-ad-rendering-role="comment_button" first (most reliable)
     const byDataRole = searchRoot.querySelector('div[data-ad-rendering-role="comment_button"]')?.closest('div[role="button"]');
     if (byDataRole) {
-      console.log('[Pajaritos] Found comment button by data-ad-rendering-role="comment_button"');
       return byDataRole;
     }
     
     // Try aria-label="Dejar un comentario" (main post comment button)
     const byAriaLabel = searchRoot.querySelector('div[role="button"][aria-label="Dejar un comentario"]');
     if (byAriaLabel) {
-      console.log('[Pajaritos] Found comment button by aria-label="Dejar un comentario"');
       return byAriaLabel;
     }
     
@@ -46,7 +43,6 @@
     const exactMatch = searchRoot.querySelector('div[role="button"][aria-label="Comentar"]') ||
                       searchRoot.querySelector('div[role="button"][aria-label="Comment"]');
     if (exactMatch) {
-      console.log('[Pajaritos] Found comment button by exact aria-label match');
       return exactMatch;
     }
     
@@ -73,8 +69,7 @@
           if (ariaLabel.includes('comentar') || ariaLabel.includes('comment') || ariaLabel.includes('dejar un comentario')) {
             // Make sure it's not a reply button
             if (!ariaLabel.includes('responder') && !ariaLabel.includes('reply')) {
-              console.log('[Pajaritos] Found comment button with selector:', selector);
-              return button;
+                return button;
             }
           }
         }
@@ -125,7 +120,7 @@
 
   // Find comment input field - specifically for MAIN POST, not comment replies
   function findCommentInput(postElement) {
-    console.log('[Pajaritos] Looking for main post comment input...');
+    // Looking for main post comment input
     
     // First, try to find input in the main post's comment area
     // Look for the main post's comment section (not nested in comments)
@@ -176,8 +171,6 @@
           const ariaLabel = input.getAttribute('aria-label')?.toLowerCase() || '';
           const ariaPlaceholder = input.getAttribute('aria-placeholder')?.toLowerCase() || '';
           
-          console.log(`[Pajaritos] Checking input: placeholder="${placeholder}", aria-label="${ariaLabel}", aria-placeholder="${ariaPlaceholder}"`);
-          
           // FIRST: Check if it's in the main post area (not nested in comments)
           // This is the most reliable way to identify main post inputs
           let isInMainPost = false;
@@ -194,7 +187,6 @@
             // If it's in the main post and not too deep, it's likely the main post input
             if (depth <= 1) {
               isInMainPost = true;
-              console.log('[Pajaritos] Input is in main post area (depth: ' + depth + ')');
             }
           }
           
@@ -219,7 +211,6 @@
             // Check if this comment container is itself inside another comment
             const parentComment = commentContainer.parentElement?.closest('[data-testid*="comment"]');
             if (parentComment) {
-              console.log('[Pajaritos] ⏭️ Skipping - input is nested in a comment reply');
               continue; // Skip if nested in a comment
             }
           }
@@ -230,7 +221,6 @@
               placeholder.includes('escribe una respuesta') ||
               ariaLabel.includes('respuesta') || ariaLabel.includes('reply') ||
               ariaPlaceholder.includes('respuesta') || ariaPlaceholder.includes('reply'))) {
-            console.log('[Pajaritos] ⏭️ Skipping - this is a reply input (respuesta) and not in main post area');
             continue; // Skip reply inputs that are not in main post
           }
         }
@@ -400,120 +390,90 @@
 
   // Create reply button for a post
   function createReplyButton(postElement) {
-    console.log('[Pajaritos] createReplyButton called for post element');
-    
     // Check if button already exists
     if (postElement.querySelector('.pajaritos-reply-btn')) {
-      console.log('[Pajaritos] Button already exists, skipping');
       return false;
     }
 
     // Find where to insert the button (near comment button or action buttons)
     const commentButton = findCommentButton(postElement);
-    console.log('[Pajaritos] Comment button found:', commentButton ? 'YES' : 'NO');
     
-    // If no comment button found, try to find the action buttons area
-    let insertTarget = commentButton;
-    if (!insertTarget) {
-      console.log('[Pajaritos] No comment button, looking for action container...');
-      // Look for the action buttons container (where Like/Comment/Share buttons are)
-      // First, try to find container with data-ad-rendering-role="comment_button"
-      // Search in both post element and its parent
-      let searchRoot = postElement;
-      const parent = postElement.parentElement;
-      if (parent) {
-        const parentHasButtons = parent.querySelector('div[data-ad-rendering-role="comment_button"]') ||
-                                 parent.querySelector('div[role="button"][aria-label*="Comentar"]');
-        if (parentHasButtons) {
-          searchRoot = parent;
-          console.log('[Pajaritos] Action buttons found in parent, using parent for search');
+      // If no comment button found, try to find the action buttons area
+      let insertTarget = commentButton;
+      if (!insertTarget) {
+        // Look for the action buttons container (where Like/Comment/Share buttons are)
+        let searchRoot = postElement;
+        const parent = postElement.parentElement;
+        if (parent) {
+          const parentHasButtons = parent.querySelector('div[data-ad-rendering-role="comment_button"]') ||
+                                   parent.querySelector('div[role="button"][aria-label*="Comentar"]');
+          if (parentHasButtons) {
+            searchRoot = parent;
+          }
         }
-      }
-      
-      const commentButtonElement = searchRoot.querySelector('div[data-ad-rendering-role="comment_button"]');
-      let actionContainer = null;
-      
-      if (commentButtonElement) {
-        // Find the parent container that holds all action buttons
-        actionContainer = commentButtonElement.closest('div.x9f619.x1n2onr6.x1ja2u2z.x78zum5') ||
-                         commentButtonElement.closest('div.xbmvrgn.x1diwwjn') ||
-                         commentButtonElement.closest('div');
-        console.log('[Pajaritos] Found action container via comment button element');
-      }
-      
-      // If not found, try other selectors
-      if (!actionContainer) {
-        actionContainer = searchRoot.querySelector('div[role="group"]') || 
-                         searchRoot.querySelector('div[role="toolbar"]') ||
-                         // Look for container with "Me gusta" and "Comentar" text
-                         Array.from(searchRoot.querySelectorAll('div')).find(div => {
-                           const txt = div.textContent?.toLowerCase() || '';
-                           return (txt.includes('me gusta') || txt.includes('like')) && 
-                                  (txt.includes('comentar') || txt.includes('comment')) &&
-                                  (txt.includes('compartir') || txt.includes('share'));
-                         });
-      }
-      
-      if (actionContainer) {
-        insertTarget = actionContainer;
-        console.log('[Pajaritos] ✅ Using action container as insert target');
-      } else {
-        // Last resort: find any container with "Comentar" text (search in post and parent)
-        console.log('[Pajaritos] Action container not found, trying fallback...');
-        let fallbackContainer = Array.from(postElement.querySelectorAll('div')).find(div => {
-          const txt = div.textContent?.toLowerCase() || '';
-          return txt.includes('comentar') && txt.includes('compartir');
-        });
         
-        if (!fallbackContainer && parent) {
-          fallbackContainer = Array.from(parent.querySelectorAll('div')).find(div => {
+        const commentButtonElement = searchRoot.querySelector('div[data-ad-rendering-role="comment_button"]');
+        let actionContainer = null;
+        
+        if (commentButtonElement) {
+          actionContainer = commentButtonElement.closest('div.x9f619.x1n2onr6.x1ja2u2z.x78zum5') ||
+                           commentButtonElement.closest('div.xbmvrgn.x1diwwjn') ||
+                           commentButtonElement.closest('div');
+        }
+        
+        if (!actionContainer) {
+          actionContainer = searchRoot.querySelector('div[role="group"]') || 
+                           searchRoot.querySelector('div[role="toolbar"]') ||
+                           Array.from(searchRoot.querySelectorAll('div')).find(div => {
+                             const txt = div.textContent?.toLowerCase() || '';
+                             return (txt.includes('me gusta') || txt.includes('like')) && 
+                                    (txt.includes('comentar') || txt.includes('comment')) &&
+                                    (txt.includes('compartir') || txt.includes('share'));
+                           });
+        }
+        
+        if (actionContainer) {
+          insertTarget = actionContainer;
+        } else {
+          let fallbackContainer = Array.from(postElement.querySelectorAll('div')).find(div => {
             const txt = div.textContent?.toLowerCase() || '';
             return txt.includes('comentar') && txt.includes('compartir');
           });
-        }
-        
-        if (fallbackContainer) {
-          insertTarget = fallbackContainer;
-          console.log('[Pajaritos] ✅ Using fallback container with Comentar/Compartir');
-        } else {
-          // Last last resort: try to find ANY container with action buttons or just append to post
-          console.log('[Pajaritos] All fallbacks failed, trying to find any action-like container...');
           
-          // Look for any div that contains "Me gusta" or "Like"
-          const anyActionContainer = Array.from(postElement.querySelectorAll('div')).find(div => {
-            const txt = div.textContent?.toLowerCase() || '';
-            return txt.includes('me gusta') || txt.includes('like');
-          });
-          
-          if (anyActionContainer) {
-            insertTarget = anyActionContainer;
-            console.log('[Pajaritos] ✅ Using container with "Me gusta" text');
-          } else if (parent) {
-            // Try parent's containers
-            const parentActionContainer = Array.from(parent.querySelectorAll('div')).find(div => {
+          if (!fallbackContainer && parent) {
+            fallbackContainer = Array.from(parent.querySelectorAll('div')).find(div => {
               const txt = div.textContent?.toLowerCase() || '';
-              return (txt.includes('me gusta') || txt.includes('like')) && 
-                     (txt.includes('comentar') || txt.includes('comment'));
+              return txt.includes('comentar') && txt.includes('compartir');
             });
-            if (parentActionContainer) {
-              insertTarget = parentActionContainer;
-              console.log('[Pajaritos] ✅ Using parent container with action buttons');
-            } else {
-              // Final fallback: append to post element itself
-              insertTarget = postElement;
-              console.log('[Pajaritos] ⚠️ Using post element itself as last resort');
-            }
+          }
+          
+          if (fallbackContainer) {
+            insertTarget = fallbackContainer;
           } else {
-            console.log('[Pajaritos] ❌ Comment button and action area not found for post');
-            console.log('[Pajaritos] Post element:', postElement);
-            console.log('[Pajaritos] Post text preview:', postElement.textContent?.substring(0, 300));
-            return false;
+            const anyActionContainer = Array.from(postElement.querySelectorAll('div')).find(div => {
+              const txt = div.textContent?.toLowerCase() || '';
+              return txt.includes('me gusta') || txt.includes('like');
+            });
+            
+            if (anyActionContainer) {
+              insertTarget = anyActionContainer;
+            } else if (parent) {
+              const parentActionContainer = Array.from(parent.querySelectorAll('div')).find(div => {
+                const txt = div.textContent?.toLowerCase() || '';
+                return (txt.includes('me gusta') || txt.includes('like')) && 
+                       (txt.includes('comentar') || txt.includes('comment'));
+              });
+              if (parentActionContainer) {
+                insertTarget = parentActionContainer;
+              } else {
+                insertTarget = postElement;
+              }
+            } else {
+              return false;
+            }
           }
         }
       }
-    } else {
-      console.log('[Pajaritos] ✅ Using comment button as insert target');
-    }
 
     // Create button
     const replyBtn = document.createElement('div');
@@ -557,22 +517,17 @@
       const parent = commentButton.parentElement;
       if (parent) {
         parent.appendChild(replyBtn);
-        console.log('[Pajaritos] ✅ Reply button added next to comment button');
         return true;
       } else {
         commentButton.insertAdjacentElement('afterend', replyBtn);
-        console.log('[Pajaritos] ✅ Reply button added after comment button');
         return true;
       }
     } else {
-      console.log('[Pajaritos] Inserting button in action container...');
       // Insert in action container
       try {
         insertTarget.appendChild(replyBtn);
-        console.log('[Pajaritos] ✅ Reply button added to action container');
         return true;
       } catch (e) {
-        console.error('[Pajaritos] ❌ Error inserting button:', e);
         return false;
       }
     }
@@ -706,7 +661,6 @@
       if (mainPostActions) {
         // Find the "Comentar" button in the main actions (not "Responder")
         const buttons = mainPostActions.querySelectorAll('div[role="button"], span[role="button"], a');
-        console.log(`[Pajaritos] Found ${buttons.length} buttons in main post actions`);
         
         let clicked = false;
         for (let i = 0; i < buttons.length; i++) {
@@ -714,38 +668,33 @@
           const text = btn.textContent?.toLowerCase().trim() || '';
           const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
           
-          console.log(`[Pajaritos] Button ${i}: text="${text}", aria-label="${ariaLabel}"`);
-          
           // Look for main post comment button (not reply button)
           if ((text === 'comentar' || text === 'comment' ||
                ariaLabel.includes('comentar') || ariaLabel.includes('comment')) &&
               !text.includes('responder') && !text.includes('reply') &&
               !ariaLabel.includes('responder') && !ariaLabel.includes('reply')) {
-            console.log('[Pajaritos] ✅ Clicking main post comment button (button ' + i + ')');
+            console.log('[Pajaritos] 💬 Clicking main post comment button');
             btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
             await wait(300);
             btn.click();
-            console.log('[Pajaritos] Comment button clicked, waiting for input to appear...');
-            await wait(2000); // Increased wait time
+            console.log('[Pajaritos] ⏳ Waiting for comment input to appear...');
+            await wait(2000);
             clicked = true;
             break;
           }
         }
         
         if (!clicked) {
-          console.log('[Pajaritos] Main comment button not found by text, trying second button in actions');
           // Fallback: click the second button (usually Comment is second after Like)
           if (buttons.length >= 2) {
-            console.log('[Pajaritos] Clicking button 1 (usually Comment)');
+            console.log('[Pajaritos] 💬 Clicking comment button (fallback)');
             buttons[1].scrollIntoView({ behavior: 'smooth', block: 'center' });
             await wait(300);
             buttons[1].click();
-            console.log('[Pajaritos] Comment button clicked, waiting for input to appear...');
-            await wait(2000); // Increased wait time
+            console.log('[Pajaritos] ⏳ Waiting for comment input to appear...');
+            await wait(2000);
           }
         }
-      } else {
-        console.log('[Pajaritos] ❌ Main post actions not found');
       }
 
       // Post comment on the main post
@@ -796,48 +745,37 @@
                          element.querySelector('div[contenteditable="true"][aria-label*="reply"]') !== null;
     
     if (hasReplyInput) {
-      console.log('[Pajaritos] ❌ Rejected: Has reply input ("Escribe una respuesta"), not main post');
       return false;
     }
     
     // If it has post attributes and no reply input, it's likely a main post
-    // But check if it's nested in a comment structure first
     if (hasPostAttributes) {
-      // Check if this is nested inside a comment container
       const commentContainer = element.closest('[data-testid*="comment"]');
       if (commentContainer) {
         const parentArticle = commentContainer.closest('div[role="article"]');
         if (parentArticle && parentArticle !== element) {
-          console.log('[Pajaritos] ❌ Rejected: Has post attributes but nested in another article');
           return false;
         }
       }
-      // Check for reply buttons more specifically (only actual buttons, not just text)
       const hasReplyButton = element.querySelector('div[role="button"][aria-label*="Responder"]') !== null ||
                             element.querySelector('div[role="button"][aria-label*="Reply"]') !== null ||
                             element.querySelector('span[role="button"][aria-label*="Responder"]') !== null ||
                             element.querySelector('span[role="button"][aria-label*="Reply"]') !== null;
       
       if (!hasReplyButton) {
-        console.log('[Pajaritos] Found post attributes (data-ad-preview="message"), treating as main post');
-        console.log('[Pajaritos] ✅ Accepting as main post based on post attributes');
         return true;
       } else {
-        console.log('[Pajaritos] ❌ Rejected: Has post attributes but also has "Responder" button (likely a comment)');
         return false;
       }
     }
     
     // If no post attributes, do stricter checks
-    // STRICT: Exclude anything that has "Responder" (Reply) buttons - those are comments
-    // But only check for actual buttons, not just text (text might be from nested comments)
     const hasReplyButton = element.querySelector('div[role="button"][aria-label*="Responder"]') !== null ||
                           element.querySelector('div[role="button"][aria-label*="Reply"]') !== null ||
                           element.querySelector('span[role="button"][aria-label*="Responder"]') !== null ||
                           element.querySelector('span[role="button"][aria-label*="Reply"]') !== null;
     
     if (hasReplyButton) {
-      console.log('[Pajaritos] ❌ Rejected: Has "Responder" button (this is a comment reply)');
       return false;
     }
     
@@ -863,15 +801,14 @@
       for (const selector of commentButtonSelectors) {
         try {
           const btn = element.querySelector(selector);
-          if (btn) {
-            // Make sure it's not a reply button
-            const btnLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
-            if (!btnLabel.includes('responder') && !btnLabel.includes('reply')) {
-              hasCommentButton = true;
-              console.log(`[Pajaritos] Found comment button with selector: ${selector}`);
-              break;
+            if (btn) {
+              // Make sure it's not a reply button
+              const btnLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
+              if (!btnLabel.includes('responder') && !btnLabel.includes('reply')) {
+                hasCommentButton = true;
+                break;
+              }
             }
-          }
         } catch (e) {
           continue;
         }
@@ -894,7 +831,6 @@
       try {
         if (element.querySelector(selector)) {
           hasMainPostInput = true;
-          console.log(`[Pajaritos] Found main post input with selector: ${selector}`);
           break;
         }
       } catch (e) {
@@ -912,7 +848,6 @@
     
     if (actionContainer) {
       hasActionButtons = true;
-      console.log('[Pajaritos] Found action buttons container (role="group" or "toolbar")');
     } else {
       // Look for buttons with Like/Comment/Share text anywhere in the element
       const allDivs = element.querySelectorAll('div, span, button');
@@ -928,7 +863,6 @@
         
         if (hasLike && (hasComment || hasShare)) {
           hasActionButtons = true;
-          console.log('[Pajaritos] Found action buttons by text search');
           break;
         }
       }
