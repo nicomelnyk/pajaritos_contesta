@@ -762,27 +762,60 @@
 
   // Check if an element is a main post (not a comment)
   function isMainPost(element) {
-    // STRICT: Exclude anything that has "Responder" (Reply) buttons - those are comments
-    const hasReplyButton = element.textContent?.includes('Responder') ||
-                          element.textContent?.includes('Reply') ||
-                          element.querySelector('[aria-label*="Responder"]') !== null ||
-                          element.querySelector('[aria-label*="Reply"]') !== null ||
-                          element.querySelector('[aria-label*="responder"]') !== null ||
-                          element.querySelector('[aria-label*="reply"]') !== null;
-    
-    if (hasReplyButton) {
-      console.log('[Pajaritos] ❌ Rejected: Has "Responder" button (this is a comment reply)');
-      return false;
-    }
+    // FIRST: Check for post attributes - these are the strongest indicator
+    // If we have post attributes, we can skip most other checks
+    const hasPostAttributes = element.getAttribute('data-ad-preview') === 'message' ||
+                             element.getAttribute('data-ad-comet-preview') === 'message' ||
+                             element.getAttribute('data-pagelet')?.includes('FeedUnit');
     
     // Make sure it's NOT a reply input ("Escribe una respuesta") - this is the STRICTEST check
     const hasReplyInput = element.querySelector('div[contenteditable="true"][aria-label*="respuesta"]') !== null ||
                          element.querySelector('div[contenteditable="true"][aria-placeholder*="respuesta"]') !== null ||
-                         element.querySelector('div[contenteditable="true"][aria-label*="reply"]') !== null ||
-                         element.textContent?.includes('Escribe una respuesta');
+                         element.querySelector('div[contenteditable="true"][aria-label*="reply"]') !== null;
     
     if (hasReplyInput) {
       console.log('[Pajaritos] ❌ Rejected: Has reply input ("Escribe una respuesta"), not main post');
+      return false;
+    }
+    
+    // If it has post attributes and no reply input, it's likely a main post
+    // But check if it's nested in a comment structure first
+    if (hasPostAttributes) {
+      // Check if this is nested inside a comment container
+      const commentContainer = element.closest('[data-testid*="comment"]');
+      if (commentContainer) {
+        const parentArticle = commentContainer.closest('div[role="article"]');
+        if (parentArticle && parentArticle !== element) {
+          console.log('[Pajaritos] ❌ Rejected: Has post attributes but nested in another article');
+          return false;
+        }
+      }
+      // Check for reply buttons more specifically (only actual buttons, not just text)
+      const hasReplyButton = element.querySelector('div[role="button"][aria-label*="Responder"]') !== null ||
+                            element.querySelector('div[role="button"][aria-label*="Reply"]') !== null ||
+                            element.querySelector('span[role="button"][aria-label*="Responder"]') !== null ||
+                            element.querySelector('span[role="button"][aria-label*="Reply"]') !== null;
+      
+      if (!hasReplyButton) {
+        console.log('[Pajaritos] Found post attributes (data-ad-preview="message"), treating as main post');
+        console.log('[Pajaritos] ✅ Accepting as main post based on post attributes');
+        return true;
+      } else {
+        console.log('[Pajaritos] ❌ Rejected: Has post attributes but also has "Responder" button (likely a comment)');
+        return false;
+      }
+    }
+    
+    // If no post attributes, do stricter checks
+    // STRICT: Exclude anything that has "Responder" (Reply) buttons - those are comments
+    // But only check for actual buttons, not just text (text might be from nested comments)
+    const hasReplyButton = element.querySelector('div[role="button"][aria-label*="Responder"]') !== null ||
+                          element.querySelector('div[role="button"][aria-label*="Reply"]') !== null ||
+                          element.querySelector('span[role="button"][aria-label*="Responder"]') !== null ||
+                          element.querySelector('span[role="button"][aria-label*="Reply"]') !== null;
+    
+    if (hasReplyButton) {
+      console.log('[Pajaritos] ❌ Rejected: Has "Responder" button (this is a comment reply)');
       return false;
     }
     
@@ -879,29 +912,7 @@
       }
     }
     
-    // Also check if this element has post-like attributes (data-ad-preview="message" is a strong indicator)
-    const hasPostAttributes = element.getAttribute('data-ad-preview') === 'message' ||
-                             element.getAttribute('data-ad-comet-preview') === 'message' ||
-                             element.getAttribute('data-pagelet')?.includes('FeedUnit');
-    
-    // For group posts, if it has post attributes and no reply input, it's likely a main post
-    // even if we can't find action buttons (they might be lazy-loaded or structured differently)
-    if (hasPostAttributes && !hasReplyInput) {
-      console.log('[Pajaritos] Found post attributes (data-ad-preview="message"), treating as main post');
-      // Still check if it's nested in a comment - if so, reject it
-      const commentContainer = element.closest('[data-testid*="comment"]');
-      if (commentContainer) {
-        const parentArticle = commentContainer.closest('div[role="article"]');
-        if (parentArticle && parentArticle !== element) {
-          console.log('[Pajaritos] ❌ Rejected: Has post attributes but nested in another article');
-          return false;
-        }
-      }
-      // If it has post attributes and no reply input, accept it (even without visible buttons)
-      console.log('[Pajaritos] ✅ Accepting as main post based on post attributes');
-      // Skip the remaining checks and return true immediately
-      return true;
-    }
+    // (Post attributes check was moved to the top of the function)
     
     // Accept if: has comment button OR has main post input OR has action buttons (and no reply input)
     if (!hasCommentButton && !hasMainPostInput && !hasActionButtons) {
