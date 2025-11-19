@@ -244,9 +244,28 @@
 
   // Post a comment on the main post
   async function postComment(commentText, postElement) {
-    const input = findCommentInput(postElement);
+    // Wait for the input to appear (it might take a moment after clicking the comment button)
+    let input = null;
+    let attempts = 0;
+    const maxAttempts = 10;
+    
+    console.log('[Pajaritos] Waiting for comment input to appear...');
+    while (!input && attempts < maxAttempts) {
+      input = findCommentInput(postElement);
+      if (!input) {
+        console.log(`[Pajaritos] Input not found yet, attempt ${attempts + 1}/${maxAttempts}`);
+        await wait(300);
+        attempts++;
+      } else {
+        console.log('[Pajaritos] ✅ Input found!');
+        break;
+      }
+    }
+    
     if (!input) {
-      console.log('[Pajaritos] Main post comment input not found');
+      console.log('[Pajaritos] ❌ Main post comment input not found after waiting');
+      console.log('[Pajaritos] Post element:', postElement);
+      console.log('[Pajaritos] Available inputs:', document.querySelectorAll('div[contenteditable="true"][role="textbox"]').length);
       return { success: false, error: 'Main post comment input not found' };
     }
 
@@ -706,7 +725,8 @@
             btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
             await wait(300);
             btn.click();
-            await wait(1500);
+            console.log('[Pajaritos] Comment button clicked, waiting for input to appear...');
+            await wait(2000); // Increased wait time
             clicked = true;
             break;
           }
@@ -720,7 +740,8 @@
             buttons[1].scrollIntoView({ behavior: 'smooth', block: 'center' });
             await wait(300);
             buttons[1].click();
-            await wait(1500);
+            console.log('[Pajaritos] Comment button clicked, waiting for input to appear...');
+            await wait(2000); // Increased wait time
           }
         }
       } else {
