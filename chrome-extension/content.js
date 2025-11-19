@@ -325,24 +325,79 @@
       input.click();
       await wait(500);
 
-      // Set the text content
+      // Clear any existing content first
       if (input.contentEditable === 'true') {
-        input.textContent = commentText;
+        input.textContent = '';
+        input.innerText = '';
+      } else {
+        input.value = '';
+      }
+      await wait(200);
+
+      // Set the text content - Facebook's contenteditable needs special handling
+      if (input.contentEditable === 'true') {
+        // Method 1: Set innerText (most reliable for contenteditable)
         input.innerText = commentText;
+        input.textContent = commentText;
         
-        // Trigger input events
-        const inputEvent = new Event('input', { bubbles: true });
-        input.dispatchEvent(inputEvent);
+        // Method 2: Create a text node and insert it
+        const range = document.createRange();
+        range.selectNodeContents(input);
+        range.deleteContents();
+        const textNode = document.createTextNode(commentText);
+        range.insertNode(textNode);
+        range.collapse(false);
         
-        // Also trigger keydown and keyup
-        input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
-        input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+        // Set cursor position
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        
+        // Trigger multiple events that Facebook listens to
+        const events = [
+          new Event('input', { bubbles: true, cancelable: true }),
+          new Event('beforeinput', { bubbles: true, cancelable: true }),
+          new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: commentText }),
+          new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'a', code: 'KeyA' }),
+          new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: 'a', code: 'KeyA' })
+        ];
+        
+        for (const event of events) {
+          input.dispatchEvent(event);
+        }
+        
+        // Also trigger composition events (Facebook might use these)
+        input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+        input.dispatchEvent(new CompositionEvent('compositionupdate', { bubbles: true, data: commentText }));
+        input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: commentText }));
+        
+        console.log('[Pajaritos] Text set in contenteditable, current value:', input.textContent || input.innerText);
       } else {
         input.value = commentText;
         input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
       }
 
-      await wait(1000); // Wait a bit longer for submit button to appear
+      // Wait for Facebook to process the text
+      await wait(1000);
+      
+      // Verify text was set
+      const currentText = input.textContent?.trim() || input.innerText?.trim() || input.value?.trim() || '';
+      if (currentText !== commentText.trim()) {
+        console.log('[Pajaritos] ⚠️ Text mismatch! Expected:', commentText, 'Got:', currentText);
+        // Try one more time with a different method
+        if (input.contentEditable === 'true') {
+          input.focus();
+          input.textContent = commentText;
+          input.innerText = commentText;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          await wait(500);
+        }
+      } else {
+        console.log('[Pajaritos] ✅ Text successfully set in input');
+      }
+
+      await wait(500); // Wait a bit longer for submit button to appear
 
       // Find and click the submit button
       let submitButton = null;
