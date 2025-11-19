@@ -375,18 +375,29 @@
     let insertTarget = commentButton;
     if (!insertTarget) {
       // Look for the action buttons container (where Like/Comment/Share buttons are)
-      // Try to find the container that has all three buttons
-      const actionContainer = postElement.querySelector('div[role="group"]') || 
-                            postElement.querySelector('div[role="toolbar"]') ||
-                            // Look for container with data-ad-rendering-role buttons
-                            postElement.querySelector('div:has(div[data-ad-rendering-role="comment_button"])') ||
-                            // Look for container with "Me gusta" and "Comentar" text
-                            Array.from(postElement.querySelectorAll('div')).find(div => {
-                              const txt = div.textContent?.toLowerCase() || '';
-                              return (txt.includes('me gusta') || txt.includes('like')) && 
-                                     (txt.includes('comentar') || txt.includes('comment')) &&
-                                     (txt.includes('compartir') || txt.includes('share'));
-                            });
+      // First, try to find container with data-ad-rendering-role="comment_button"
+      const commentButtonElement = postElement.querySelector('div[data-ad-rendering-role="comment_button"]');
+      let actionContainer = null;
+      
+      if (commentButtonElement) {
+        // Find the parent container that holds all action buttons
+        actionContainer = commentButtonElement.closest('div.x9f619.x1n2onr6.x1ja2u2z.x78zum5') ||
+                         commentButtonElement.closest('div.xbmvrgn.x1diwwjn') ||
+                         commentButtonElement.closest('div');
+      }
+      
+      // If not found, try other selectors
+      if (!actionContainer) {
+        actionContainer = postElement.querySelector('div[role="group"]') || 
+                         postElement.querySelector('div[role="toolbar"]') ||
+                         // Look for container with "Me gusta" and "Comentar" text
+                         Array.from(postElement.querySelectorAll('div')).find(div => {
+                           const txt = div.textContent?.toLowerCase() || '';
+                           return (txt.includes('me gusta') || txt.includes('like')) && 
+                                  (txt.includes('comentar') || txt.includes('comment')) &&
+                                  (txt.includes('compartir') || txt.includes('share'));
+                         });
+      }
       
       if (actionContainer) {
         insertTarget = actionContainer;
