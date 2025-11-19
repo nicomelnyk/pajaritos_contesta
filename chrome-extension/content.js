@@ -9,8 +9,33 @@
 
   // Find comment button for a post
   function findCommentButton(postElement) {
-    // Try attribute-based selectors first
+    console.log('[Pajaritos] Looking for comment button in post...');
+    
+    // Try data-ad-rendering-role="comment_button" first (most reliable)
+    const byDataRole = postElement.querySelector('div[data-ad-rendering-role="comment_button"]')?.closest('div[role="button"]');
+    if (byDataRole) {
+      console.log('[Pajaritos] Found comment button by data-ad-rendering-role="comment_button"');
+      return byDataRole;
+    }
+    
+    // Try aria-label="Dejar un comentario" (main post comment button)
+    const byAriaLabel = postElement.querySelector('div[role="button"][aria-label="Dejar un comentario"]');
+    if (byAriaLabel) {
+      console.log('[Pajaritos] Found comment button by aria-label="Dejar un comentario"');
+      return byAriaLabel;
+    }
+    
+    // Try exact match (aria-label="Comentar")
+    const exactMatch = postElement.querySelector('div[role="button"][aria-label="Comentar"]') ||
+                      postElement.querySelector('div[role="button"][aria-label="Comment"]');
+    if (exactMatch) {
+      console.log('[Pajaritos] Found comment button by exact aria-label match');
+      return exactMatch;
+    }
+    
+    // Try attribute-based selectors
     const selectors = [
+      'div[role="button"][aria-label*="Dejar un comentario"]',
       'div[role="button"][aria-label*="Comment"]',
       'div[role="button"][aria-label*="Comentar"]',
       'div[role="button"][aria-label*="comment"]',
@@ -24,7 +49,18 @@
     for (const selector of selectors) {
       try {
         const button = postElement.querySelector(selector);
-        if (button && button.offsetParent !== null) return button;
+        if (button) {
+          // Don't check offsetParent for disabled buttons - they might still be visible
+          // Just check if it exists and has the right aria-label
+          const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
+          if (ariaLabel.includes('comentar') || ariaLabel.includes('comment') || ariaLabel.includes('dejar un comentario')) {
+            // Make sure it's not a reply button
+            if (!ariaLabel.includes('responder') && !ariaLabel.includes('reply')) {
+              console.log('[Pajaritos] Found comment button with selector:', selector);
+              return button;
+            }
+          }
+        }
       } catch (e) {
         console.warn('[Pajaritos] Invalid selector:', selector, e);
       }
@@ -339,11 +375,16 @@
     let insertTarget = commentButton;
     if (!insertTarget) {
       // Look for the action buttons container (where Like/Comment/Share buttons are)
+      // Try to find the container that has all three buttons
       const actionContainer = postElement.querySelector('div[role="group"]') || 
                             postElement.querySelector('div[role="toolbar"]') ||
+                            // Look for container with data-ad-rendering-role buttons
+                            postElement.querySelector('div:has(div[data-ad-rendering-role="comment_button"])') ||
+                            // Look for container with "Me gusta" and "Comentar" text
                             Array.from(postElement.querySelectorAll('div')).find(div => {
                               const txt = div.textContent?.toLowerCase() || '';
                               return (txt.includes('me gusta') || txt.includes('like')) && 
+                                     (txt.includes('comentar') || txt.includes('comment')) &&
                                      (txt.includes('compartir') || txt.includes('share'));
                             });
       
@@ -351,8 +392,19 @@
         insertTarget = actionContainer;
         console.log('[Pajaritos] Using action container as insert target');
       } else {
-        console.log('[Pajaritos] Comment button and action area not found for post');
-        return false;
+        // Last resort: find any container with "Comentar" text
+        const fallbackContainer = Array.from(postElement.querySelectorAll('div')).find(div => {
+          const txt = div.textContent?.toLowerCase() || '';
+          return txt.includes('comentar') && txt.includes('compartir');
+        });
+        
+        if (fallbackContainer) {
+          insertTarget = fallbackContainer;
+          console.log('[Pajaritos] Using fallback container with Comentar/Compartir');
+        } else {
+          console.log('[Pajaritos] Comment button and action area not found for post');
+          return false;
+        }
       }
     }
 
