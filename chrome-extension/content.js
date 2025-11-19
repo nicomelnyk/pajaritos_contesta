@@ -126,6 +126,18 @@
     // Look for the main post's comment section (not nested in comments)
     // The main post comment area should be directly in the post, not nested in comment replies
     const allDivs = postElement.querySelectorAll('div');
+    
+    // Also search in parent elements (the input might be a sibling to postElement)
+    let searchRoot = postElement;
+    const parent = postElement.parentElement;
+    if (parent) {
+      // Check if parent has comment inputs
+      const parentHasInputs = parent.querySelector('div[contenteditable="true"][role="textbox"]');
+      if (parentHasInputs) {
+        searchRoot = parent;
+        console.log('[Pajaritos] Searching for input in parent element');
+      }
+    }
     let mainPostCommentArea = null;
     
     for (const div of allDivs) {
@@ -154,6 +166,7 @@
     }
     
     // Fallback: look for inputs but exclude ones that are clearly reply inputs
+    // Search in both postElement and its parent/siblings
     const selectors = [
       'div[contenteditable="true"][role="textbox"]',
       'div[contenteditable="true"]',
@@ -163,7 +176,40 @@
 
     for (const selector of selectors) {
       try {
-        const inputs = document.querySelectorAll(selector);
+        // First try in postElement
+        let inputs = Array.from(postElement.querySelectorAll(selector));
+        
+        // If not found, try in parent and siblings
+        if (inputs.length === 0 && parent) {
+          inputs = Array.from(parent.querySelectorAll(selector));
+          console.log(`[Pajaritos] Searching in parent, found ${inputs.length} inputs`);
+        }
+        
+        // If still not found, search the whole document but filter by proximity to postElement
+        if (inputs.length === 0) {
+          const allInputs = document.querySelectorAll(selector);
+          console.log(`[Pajaritos] Searching document-wide, found ${allInputs.length} total inputs`);
+          
+          // Filter inputs that are near the postElement (within reasonable DOM distance)
+          inputs = Array.from(allInputs).filter(input => {
+            if (input.offsetParent === null) return false; // Skip hidden
+            
+            // Check if input is in the same general area as the post
+            const postRect = postElement.getBoundingClientRect();
+            const inputRect = input.getBoundingClientRect();
+            
+            // Input should be below the post (comments appear below posts)
+            const isBelowPost = inputRect.top > postRect.top;
+            
+            // Input should be reasonably close horizontally
+            const horizontalDistance = Math.abs(inputRect.left - postRect.left);
+            const isNearHorizontally = horizontalDistance < 500; // Within 500px
+            
+            return isBelowPost && isNearHorizontally;
+          });
+          
+          console.log(`[Pajaritos] Filtered to ${inputs.length} inputs near the post`);
+        }
         for (const input of inputs) {
           if (input.offsetParent === null) continue; // Skip hidden
           
@@ -175,9 +221,14 @@
           // This is the most reliable way to identify main post inputs
           let isInMainPost = false;
           let depth = 0;
-          if (postElement.contains(input)) {
+          
+          // Check if input is within postElement or its parent
+          const isInPost = postElement.contains(input) || (parent && parent.contains(input));
+          
+          if (isInPost) {
             let current = input.parentElement;
-            while (current && current !== postElement && depth < 10) {
+            let searchRoot = postElement.contains(input) ? postElement : parent;
+            while (current && current !== searchRoot && depth < 10) {
               if (current.getAttribute('data-testid')?.includes('comment')) {
                 depth++;
               }
@@ -187,6 +238,15 @@
             // If it's in the main post and not too deep, it's likely the main post input
             if (depth <= 1) {
               isInMainPost = true;
+            }
+          } else {
+            // Input is not in postElement, but might be a sibling (common in Facebook)
+            // Check if it's near the post and not nested in comments
+            const inputContainer = input.closest('[data-testid*="comment"]');
+            if (!inputContainer || inputContainer === postElement.closest('[data-testid*="comment"]')) {
+              // Not in a nested comment, might be the main post input
+              isInMainPost = true;
+              console.log('[Pajaritos] Input appears to be a sibling of the post, treating as main post input');
             }
           }
           
