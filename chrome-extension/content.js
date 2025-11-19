@@ -178,14 +178,24 @@
           
           console.log(`[Pajaritos] Checking input: placeholder="${placeholder}", aria-label="${ariaLabel}", aria-placeholder="${ariaPlaceholder}"`);
           
-          // Skip if it's clearly a reply input (has "respuesta" or "reply" in placeholder/aria-label)
-          
-          if (placeholder.includes('respuesta') || placeholder.includes('reply') ||
-              placeholder.includes('escribe una respuesta') ||
-              ariaLabel.includes('respuesta') || ariaLabel.includes('reply') ||
-              ariaPlaceholder.includes('respuesta') || ariaPlaceholder.includes('reply')) {
-            console.log('[Pajaritos] ⏭️ Skipping - this is a reply input (respuesta)');
-            continue; // Skip reply inputs
+          // FIRST: Check if it's in the main post area (not nested in comments)
+          // This is the most reliable way to identify main post inputs
+          let isInMainPost = false;
+          let depth = 0;
+          if (postElement.contains(input)) {
+            let current = input.parentElement;
+            while (current && current !== postElement && depth < 10) {
+              if (current.getAttribute('data-testid')?.includes('comment')) {
+                depth++;
+              }
+              current = current.parentElement;
+            }
+            
+            // If it's in the main post and not too deep, it's likely the main post input
+            if (depth <= 1) {
+              isInMainPost = true;
+              console.log('[Pajaritos] Input is in main post area (depth: ' + depth + ')');
+            }
           }
           
           // Prefer main post inputs: "comentario público" or "public comment"
@@ -193,6 +203,13 @@
               ariaLabel.includes('comentario público') || ariaLabel.includes('public comment') ||
               ariaPlaceholder.includes('comentario público') || ariaPlaceholder.includes('public comment')) {
             console.log('[Pajaritos] ✅ Found main post input by placeholder/aria-label (comentario público)');
+            return input;
+          }
+          
+          // If it's in the main post area, accept it even if it says "respuesta"
+          // (In group posts, main post inputs sometimes use "respuesta" instead of "comentario público")
+          if (isInMainPost) {
+            console.log('[Pajaritos] ✅ Found input in main post area - accepting even if it says "respuesta"');
             return input;
           }
           
@@ -207,30 +224,14 @@
             }
           }
           
-          // Prefer inputs with "comentario público" or "public comment"
-          if (placeholder.includes('comentario público') || placeholder.includes('public comment')) {
-            console.log('[Pajaritos] ✅ Found main post input by placeholder (comentario público)');
-            return input;
-          }
-          
-          // Check if it's in the main post (not deep in comments)
-          if (postElement.contains(input)) {
-            // Make sure it's not too deep (not in a nested comment structure)
-            let depth = 0;
-            let current = input.parentElement;
-            while (current && current !== postElement && depth < 10) {
-              if (current.getAttribute('data-testid')?.includes('comment')) {
-                depth++;
-              }
-              current = current.parentElement;
-            }
-            
-            if (depth <= 1) { // Only 1 level deep max (main post -> comment area)
-              console.log('[Pajaritos] ✅ Found input in main post area (depth: ' + depth + ')');
-              return input;
-            } else {
-              console.log('[Pajaritos] ⏭️ Skipping - input too deep in comment structure (depth: ' + depth + ')');
-            }
+          // Skip if it's clearly a reply input AND not in main post area
+          // (Only skip if it's nested in comments)
+          if (!isInMainPost && (placeholder.includes('respuesta') || placeholder.includes('reply') ||
+              placeholder.includes('escribe una respuesta') ||
+              ariaLabel.includes('respuesta') || ariaLabel.includes('reply') ||
+              ariaPlaceholder.includes('respuesta') || ariaPlaceholder.includes('reply'))) {
+            console.log('[Pajaritos] ⏭️ Skipping - this is a reply input (respuesta) and not in main post area');
+            continue; // Skip reply inputs that are not in main post
           }
         }
       } catch (e) {
