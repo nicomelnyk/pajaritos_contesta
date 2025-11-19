@@ -882,22 +882,25 @@
   // Add buttons to all posts
   function addButtonsToPosts() {
     const postSelectors = [
+      'div[data-ad-preview="message"]',  // Try this first - most reliable for group posts
+      'div[data-ad-comet-preview="message"]',
       'div[data-pagelet*="FeedUnit"]',
       'div[role="article"]',
-      'div[data-testid*="post"]',
-      'div[data-ad-preview="message"]',
-      'div[data-ad-comet-preview="message"]'
+      'div[data-testid*="post"]'
     ];
 
     let posts = [];
     for (const selector of postSelectors) {
       const found = document.querySelectorAll(selector);
       if (found.length > 0) {
+        console.log(`[Pajaritos] Found ${found.length} elements with selector: ${selector}`);
         // Filter to only main posts, not comments
         const filtered = Array.from(found).filter(post => {
           const isMain = isMainPost(post);
           if (!isMain) {
             console.log('[Pajaritos] Skipping element (not a main post):', post);
+          } else {
+            console.log('[Pajaritos] ✅ Accepted as main post:', post);
           }
           return isMain;
         });
@@ -956,16 +959,31 @@
 
     console.log(`[Pajaritos] Processing ${posts.length} posts`);
     
+    if (posts.length === 0) {
+      console.log('[Pajaritos] ⚠️ No posts to process!');
+      return;
+    }
+    
     let buttonsAdded = 0;
-    posts.forEach(post => {
+    posts.forEach((post, index) => {
+      console.log(`[Pajaritos] Processing post ${index + 1}/${posts.length}`);
       if (!post.querySelector('.pajaritos-reply-btn')) {
         const success = createReplyButton(post);
-        if (success) buttonsAdded++;
+        if (success) {
+          buttonsAdded++;
+          console.log(`[Pajaritos] ✅ Successfully added button to post ${index + 1}`);
+        } else {
+          console.log(`[Pajaritos] ❌ Failed to add button to post ${index + 1}`);
+        }
+      } else {
+        console.log(`[Pajaritos] Post ${index + 1} already has a button`);
       }
     });
     
     if (buttonsAdded > 0) {
-      console.log(`[Pajaritos] Added ${buttonsAdded} reply buttons`);
+      console.log(`[Pajaritos] ✅ Added ${buttonsAdded} reply buttons`);
+    } else {
+      console.log(`[Pajaritos] ⚠️ No buttons were added (${posts.length} posts processed)`);
     }
   }
 
