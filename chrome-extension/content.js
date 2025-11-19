@@ -950,27 +950,11 @@
       return;
     }
     
-    let buttonsAdded = 0;
-    posts.forEach((post, index) => {
-      console.log(`[Pajaritos] Processing post ${index + 1}/${posts.length}`);
+    posts.forEach((post) => {
       if (!post.querySelector('.pajaritos-reply-btn')) {
-        const success = createReplyButton(post);
-        if (success) {
-          buttonsAdded++;
-          console.log(`[Pajaritos] ✅ Successfully added button to post ${index + 1}`);
-        } else {
-          console.log(`[Pajaritos] ❌ Failed to add button to post ${index + 1}`);
-        }
-      } else {
-        console.log(`[Pajaritos] Post ${index + 1} already has a button`);
+        createReplyButton(post);
       }
     });
-    
-    if (buttonsAdded > 0) {
-      console.log(`[Pajaritos] ✅ Added ${buttonsAdded} reply buttons`);
-    } else {
-      console.log(`[Pajaritos] ⚠️ No buttons were added (${posts.length} posts processed)`);
-    }
   }
 
   // Observer for new posts
