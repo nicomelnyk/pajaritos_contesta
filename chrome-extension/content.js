@@ -42,9 +42,9 @@
       return byAriaLabel;
     }
     
-    // Try exact match (aria-label="Comentar")
-    const exactMatch = postElement.querySelector('div[role="button"][aria-label="Comentar"]') ||
-                      postElement.querySelector('div[role="button"][aria-label="Comment"]');
+    // Try exact match (aria-label="Comentar") - use searchRoot
+    const exactMatch = searchRoot.querySelector('div[role="button"][aria-label="Comentar"]') ||
+                      searchRoot.querySelector('div[role="button"][aria-label="Comment"]');
     if (exactMatch) {
       console.log('[Pajaritos] Found comment button by exact aria-label match');
       return exactMatch;
