@@ -342,104 +342,111 @@
         input.dispatchEvent(new Event('input', { bubbles: true }));
       }
 
-      await wait(800);
+      await wait(1000); // Wait a bit longer for submit button to appear
 
       // Find and click the submit button
-      // First, try to find button near the input (most reliable)
       let submitButton = null;
       
-      // Look in the same container as the input
-      const inputContainer = input.closest('div[role="textbox"]')?.parentElement ||
-                            input.closest('form') ||
+      // Strategy 1: Look in the input's container and nearby elements
+      const inputContainer = input.closest('form') ||
                             input.closest('div[data-testid*="comment"]') ||
-                            input.parentElement?.parentElement;
+                            input.closest('div[role="textbox"]')?.parentElement?.parentElement ||
+                            input.parentElement?.parentElement?.parentElement;
       
       if (inputContainer) {
-        // Look for submit button in the container
-        const buttons = inputContainer.querySelectorAll('div[role="button"], span[role="button"], button[type="submit"], button');
+        const buttons = inputContainer.querySelectorAll('div[role="button"], span[role="button"], button');
+        console.log(`[Pajaritos] Found ${buttons.length} buttons in input container`);
+        
         for (const btn of buttons) {
-          if (btn.offsetParent === null) continue; // Skip hidden
+          if (btn.offsetParent === null) continue;
           
           const text = btn.textContent?.toLowerCase().trim() || '';
           const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
           const title = btn.getAttribute('title')?.toLowerCase() || '';
           
+          console.log(`[Pajaritos] Checking button: text="${text}", aria-label="${ariaLabel}"`);
+          
           // Check if it's a submit button
-          if (text === 'publicar' || text === 'post' || 
+          if (text === 'publicar' || text === 'post' || text === 'comentar' || text === 'comment' ||
               ariaLabel.includes('publicar') || ariaLabel.includes('post') ||
+              ariaLabel.includes('comentar') && !ariaLabel.includes('escribir') ||
               title.includes('publicar') || title.includes('post') ||
               btn.type === 'submit') {
             submitButton = btn;
-            console.log('[Pajaritos] Found submit button near input:', text || ariaLabel);
+            console.log('[Pajaritos] ✅ Found submit button in container:', text || ariaLabel);
             break;
           }
         }
       }
       
-      // If not found, try global selectors
+      // Strategy 2: Search document-wide for buttons near the input
       if (!submitButton) {
-        const submitSelectors = [
-          'div[aria-label*="Post"][role="button"]',
-          'div[aria-label*="Publicar"][role="button"]',
-          'div[aria-label*="Comment"][role="button"]:not([aria-label*="Write"])',
-          'button[type="submit"]'
-        ];
-
-        for (const selector of submitSelectors) {
-          try {
-            const buttons = document.querySelectorAll(selector);
-            for (const btn of buttons) {
-              // Check if button is visible and near the input
-              if (btn.offsetParent !== null) {
-                // Check if it's near our input
-                const btnRect = btn.getBoundingClientRect();
-                const inputRect = input.getBoundingClientRect();
-                const distance = Math.abs(btnRect.top - inputRect.bottom);
-                
-                if (distance < 100) { // Within 100px of input
-                  submitButton = btn;
-                  console.log('[Pajaritos] Found submit button with selector:', selector);
-                  break;
-                }
-              }
-            }
-            if (submitButton) break;
-          } catch (e) {
-            console.warn('[Pajaritos] Invalid selector:', selector);
-          }
-        }
-      }
-      
-      // Last resort: look for any button with submit-like text near input
-      if (!submitButton) {
-        const allButtons = document.querySelectorAll('div[role="button"], button');
+        const inputRect = input.getBoundingClientRect();
+        const allButtons = document.querySelectorAll('div[role="button"], span[role="button"], button');
+        console.log(`[Pajaritos] Searching ${allButtons.length} buttons document-wide`);
+        
         for (const btn of allButtons) {
           if (btn.offsetParent === null) continue;
           
           const btnRect = btn.getBoundingClientRect();
-          const inputRect = input.getBoundingClientRect();
-          const distance = Math.abs(btnRect.top - inputRect.bottom);
+          const verticalDistance = Math.abs(btnRect.top - inputRect.bottom);
+          const horizontalDistance = Math.abs(btnRect.left - inputRect.left);
           
-          if (distance < 50) { // Very close to input
-            const text = btn.textContent?.toLowerCase() || '';
+          // Button should be below input and reasonably close horizontally
+          if (btnRect.top > inputRect.bottom && verticalDistance < 150 && horizontalDistance < 300) {
+            const text = btn.textContent?.toLowerCase().trim() || '';
             const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
-            if (text.includes('publicar') || text.includes('post') || 
-                ariaLabel.includes('publicar') || ariaLabel.includes('post')) {
+            
+            // Check if it looks like a submit button
+            if (text === 'publicar' || text === 'post' || 
+                ariaLabel.includes('publicar') || ariaLabel.includes('post') ||
+                (ariaLabel.includes('comentar') && !ariaLabel.includes('escribir'))) {
               submitButton = btn;
-              console.log('[Pajaritos] Found submit button by proximity:', text || ariaLabel);
+              console.log('[Pajaritos] ✅ Found submit button by proximity:', text || ariaLabel);
               break;
             }
           }
         }
       }
+      
+      // Strategy 3: Try pressing Enter (Facebook often submits on Enter)
+      if (!submitButton) {
+        console.log('[Pajaritos] Submit button not found, trying Enter key...');
+        input.focus();
+        await wait(200);
+        
+        // Simulate Enter key press
+        const enterEvent = new KeyboardEvent('keydown', {
+          key: 'Enter',
+          code: 'Enter',
+          keyCode: 13,
+          which: 13,
+          bubbles: true,
+          cancelable: true
+        });
+        input.dispatchEvent(enterEvent);
+        
+        await wait(500);
+        
+        // Check if comment was posted (input should be cleared or comment should appear)
+        const inputAfterEnter = input.textContent?.trim() || input.value?.trim() || '';
+        if (inputAfterEnter === '' || inputAfterEnter !== commentText) {
+          console.log('[Pajaritos] ✅ Comment posted via Enter key');
+          return { success: true };
+        }
+      }
 
       if (submitButton) {
+        submitButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        await wait(200);
         submitButton.click();
-        console.log('[Pajaritos] Comment posted:', commentText);
+        console.log('[Pajaritos] ✅ Comment posted via submit button');
         await wait(500);
         return { success: true };
       } else {
-        console.log('[Pajaritos] Submit button not found');
+        console.log('[Pajaritos] ❌ Submit button not found and Enter key did not work');
+        console.log('[Pajaritos] Input container:', inputContainer);
+        console.log('[Pajaritos] Input text after typing:', input.textContent || input.value);
         return { success: false, error: 'Submit button not found' };
       }
     } catch (error) {
