@@ -456,10 +456,39 @@
           insertTarget = fallbackContainer;
           console.log('[Pajaritos] ✅ Using fallback container with Comentar/Compartir');
         } else {
-          console.log('[Pajaritos] ❌ Comment button and action area not found for post');
-          console.log('[Pajaritos] Post element:', postElement);
-          console.log('[Pajaritos] Post text preview:', postElement.textContent?.substring(0, 300));
-          return false;
+          // Last last resort: try to find ANY container with action buttons or just append to post
+          console.log('[Pajaritos] All fallbacks failed, trying to find any action-like container...');
+          
+          // Look for any div that contains "Me gusta" or "Like"
+          const anyActionContainer = Array.from(postElement.querySelectorAll('div')).find(div => {
+            const txt = div.textContent?.toLowerCase() || '';
+            return txt.includes('me gusta') || txt.includes('like');
+          });
+          
+          if (anyActionContainer) {
+            insertTarget = anyActionContainer;
+            console.log('[Pajaritos] ✅ Using container with "Me gusta" text');
+          } else if (parent) {
+            // Try parent's containers
+            const parentActionContainer = Array.from(parent.querySelectorAll('div')).find(div => {
+              const txt = div.textContent?.toLowerCase() || '';
+              return (txt.includes('me gusta') || txt.includes('like')) && 
+                     (txt.includes('comentar') || txt.includes('comment'));
+            });
+            if (parentActionContainer) {
+              insertTarget = parentActionContainer;
+              console.log('[Pajaritos] ✅ Using parent container with action buttons');
+            } else {
+              // Final fallback: append to post element itself
+              insertTarget = postElement;
+              console.log('[Pajaritos] ⚠️ Using post element itself as last resort');
+            }
+          } else {
+            console.log('[Pajaritos] ❌ Comment button and action area not found for post');
+            console.log('[Pajaritos] Post element:', postElement);
+            console.log('[Pajaritos] Post text preview:', postElement.textContent?.substring(0, 300));
+            return false;
+          }
         }
       }
     } else {
