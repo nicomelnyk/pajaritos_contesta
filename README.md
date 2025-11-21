@@ -1,135 +1,45 @@
-# Pajaritos Contesta
+# Pajaritos Contesta - Chrome Extension
 
-A Next.js application for managing automated responses in Facebook groups. Supports multiple admin users with individual Facebook authentication.
+A Chrome extension that adds a "🐦 Reply" button to Facebook posts, allowing you to quickly reply to posts with a custom message.
 
 ## Features
 
-- 🔐 Multi-user Facebook OAuth authentication
-- 👥 Session-based user identification
-- 📱 Facebook Groups API integration
-- 💬 Post comments on group posts
-- 🎨 Modern UI with Tailwind CSS
-- 🚀 Ready for Vercel deployment
+- 🐦 Adds a "Reply" button to each main post on Facebook
+- 📝 Opens a form to type your comment
+- ✅ Posts comments directly to Facebook posts
+- 📊 Tracks your recent comment activity
 
-## Tech Stack
+## Installation
 
-- **Next.js 14** (App Router)
-- **NextAuth.js v5** (Authentication)
-- **TypeScript**
-- **Tailwind CSS**
-- **Facebook Graph API**
+1. Open Chrome and go to `chrome://extensions/`
+2. Enable "Developer mode" (toggle in top right)
+3. Click "Load unpacked"
+4. Select the `chrome-extension` folder
+5. The extension is now installed!
 
-## Setup Instructions
+## Usage
 
-### 1. Install Dependencies
+1. Navigate to any Facebook group or page
+2. You'll see a blue "🐦 Reply" button on each main post
+3. Click the button to open the reply form
+4. Type your comment and click "Post Comment"
+5. Your comment will be posted!
 
-```bash
-npm install
-```
+## Files
 
-### 2. Configure Environment Variables
+- `manifest.json` - Extension configuration
+- `content.js` - Main script that runs on Facebook pages
+- `popup.html` / `popup.js` - Extension popup UI
+- `background.js` - Background service worker
+- `styles.css` - Extension styles
+- `icon.svg` / `icon*.png` - Extension icons
 
-Copy `.env.local.example` to `.env.local` and fill in your values:
+## Development
 
-```bash
-cp .env.local.example .env.local
-```
+To reload the extension after making changes:
+1. Go to `chrome://extensions/`
+2. Click the reload icon on the extension card
+3. Refresh the Facebook page
 
-Required variables:
-- `FACEBOOK_APP_ID` - Your Facebook App ID
-- `FACEBOOK_APP_SECRET` - Your Facebook App Secret
-- `NEXTAUTH_URL` - Your app URL 
-  - For dev: `http://localhost:3000`
-  - For production: `https://pajaritoscontesta-4zx9v6ytm-nicolasmelnyks-projects.vercel.app`
-- `NEXTAUTH_SECRET` - Random secret (generate with `openssl rand -base64 32`)
-
-### 3. Facebook App Setup
-
-**See `MANUAL_SETUP.md` for detailed Facebook configuration steps.**
-
-Quick checklist:
-- [ ] Create Facebook App at developers.facebook.com
-- [ ] Add Facebook Login product
-- [ ] Configure OAuth redirect URIs
-- [ ] Request required permissions
-- [ ] Add test users (for development)
-- [ ] Submit for App Review (for production)
-
-### 4. Run Development Server
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000)
-
-## How Multi-User Authentication Works
-
-1. **User Login**: Each admin logs in with their Facebook account via OAuth
-2. **Session Creation**: NextAuth creates a JWT session with the user's access token
-3. **Token Storage**: Access token is stored in an HTTP-only cookie (secure)
-4. **API Calls**: When making Facebook API calls, the session is read to get the current user's token
-5. **User Identification**: The session contains the user's ID, so each request knows which user is making it
-
-## API Routes
-
-- `GET /api/auth/[...nextauth]` - NextAuth authentication endpoints
-- `GET /api/facebook/groups` - Get user's Facebook groups
-- `GET /api/facebook/posts?groupId={id}` - Get posts from a group
-- `POST /api/facebook/comment` - Post a comment on a post
-
-## Deployment to Vercel
-
-✅ **Already deployed!** Your app is live at:
-`https://pajaritoscontesta-4zx9v6ytm-nicolasmelnyks-projects.vercel.app`
-
-**Important:** Add environment variables in Vercel Dashboard:
-1. Go to your project in [Vercel Dashboard](https://vercel.com/dashboard)
-2. Navigate to **Settings** → **Environment Variables**
-3. Add all required variables (see Step 2 above)
-4. Make sure `NEXTAUTH_URL` is set to your production URL
-5. Redeploy if needed
-
-**For future deployments:**
-- Push your code to GitHub
-- Vercel will auto-deploy on push
-- Update Facebook OAuth redirect URIs if domain changes
-
-## Important Notes
-
-⚠️ **Facebook Groups API Limitations:**
-- Some Groups API endpoints were deprecated in 2024
-- Posting new posts to groups may not work
-- Commenting on existing posts may still work
-- Check Facebook's current API documentation
-
-⚠️ **Permissions:**
-- Advanced permissions require App Review
-- Development mode allows testing with your own account
-- Add test users in Facebook App settings
-
-## Project Structure
-
-```
-├── app/
-│   ├── api/
-│   │   ├── auth/[...nextauth]/  # NextAuth routes
-│   │   └── facebook/            # Facebook API routes
-│   ├── auth/
-│   │   └── signin/              # Sign in page
-│   ├── auth.ts                  # NextAuth configuration
-│   ├── layout.tsx               # Root layout
-│   ├── page.tsx                 # Home page
-│   └── globals.css              # Global styles
-├── components/
-│   └── Dashboard.tsx            # Main dashboard component
-├── types/
-│   └── next-auth.d.ts          # TypeScript definitions
-├── MANUAL_SETUP.md             # Facebook setup guide
-└── README.md                   # This file
-```
-
-## License
-
-ISC
+For more detailed reload instructions, see `chrome-extension/RELOAD_INSTRUCTIONS.md`.
 
