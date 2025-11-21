@@ -600,7 +600,7 @@
     // Create button
     const replyBtn = document.createElement('div');
     replyBtn.className = 'pajaritos-reply-btn';
-    replyBtn.innerHTML = '🐦 Reply';
+    replyBtn.innerHTML = '🐦 pajaritos contesta';
     replyBtn.style.cssText = `
       display: inline-flex;
       align-items: center;
