@@ -1,4 +1,4 @@
-# Pajaritos Contesta - Chrome Extension
+# Pajaritos de Guardia - Chrome Extension
 
 A Chrome extension that automatically replies to Facebook posts based on keyword rules. Works with all Facebook posts including groups (bypasses API limitations).
 

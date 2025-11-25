@@ -7,7 +7,7 @@ Chrome is caching an old version of the extension with invalid selectors.
 
 ### Step 1: Remove the Extension Completely
 1. Go to `chrome://extensions/`
-2. Find "Pajaritos Contesta - Auto Reply"
+2. Find "Pajaritos de Guardia"
 3. Click **"Quitar"** (Remove) button
 4. Confirm removal
 
@@ -25,7 +25,7 @@ Chrome is caching an old version of the extension with invalid selectors.
 1. Check that version shows **1.0.1** (not 1.0.0)
 2. Click "Borrar todo" (Clear all) in Errors section
 3. Refresh Facebook page
-4. Open Console (F12) - you should see `[Pajaritos Contesta] Content script loaded`
+4. Open Console (F12) - you should see `[Pajaritos de Guardia] Content script loaded`
 
 ## If Errors Persist
 The error `'span:contains("Comment")'` is from old cached code. The current code doesn't have this selector. Make sure you:

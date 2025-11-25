@@ -12,8 +12,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (history.length === 0) {
         statusList.innerHTML = `
           <div style="color: #65676b; font-size: 13px; text-align: center; padding: 20px 0;">
-            No comments posted yet.<br>
-            Click "🐦 Reply" on any Facebook post to get started!
+            Aún no se publicaron comentarios.<br>
+            ¡Hacé clic en "🐦" en cualquier post de Facebook para comenzar!
           </div>
         `;
         clearBtn.style.display = 'none';
@@ -33,9 +33,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return `
           <div class="status-item">
             <div class="${item.success ? 'status-success' : 'status-error'}">
-              ${item.success ? '✅' : '❌'} ${item.message || 'Comment posted'}
+              ${item.success ? '✅' : '❌'} ${item.message || 'Comentario publicado'}
             </div>
-            <div class="status-time">${dateStr} at ${timeStr}</div>
+            <div class="status-time">${dateStr} a las ${timeStr}</div>
           </div>
         `;
       }).join('');

@@ -1,7 +1,7 @@
 // Background service worker for Chrome extension
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('Pajaritos Contesta extension installed');
+  console.log('Pajaritos de Guardia extension installed');
   
   // Set default values
   chrome.storage.sync.set({
@@ -10,4 +10,7 @@ chrome.runtime.onInstalled.addListener(() => {
     delay: 2000
   });
 });
+
+// Background service worker for Chrome extension
+// (No special message handling needed for modal approach)
 

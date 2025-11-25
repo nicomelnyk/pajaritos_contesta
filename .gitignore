@@ -18,6 +18,7 @@
 # misc
 .DS_Store
 *.pem
+*.log
 
 # debug
 npm-debug.log*
@@ -34,4 +35,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Chrome extension (keep these, they're needed)
+# chrome-extension/images/
+# chrome-extension/*.png
+# chrome-extension/*.js
+# chrome-extension/*.html
+# chrome-extension/*.css
+# chrome-extension/*.json
 
