@@ -710,6 +710,13 @@
   // Fallback: Add button to main post structure (when comment section approach fails)
   function addButtonToMainPostStructure(postElement) {
     console.log('[Pajaritos] 🔘 addButtonToMainPostStructure called for post:', postElement);
+    console.log('[Pajaritos] 🔍 Post element details:', {
+      tagName: postElement.tagName,
+      className: postElement.className?.substring(0, 50),
+      id: postElement.id,
+      hasChildren: postElement.children.length,
+      textPreview: postElement.textContent?.substring(0, 50)
+    });
     
     // Check if button already exists
     if (postElement.querySelector('.pajaritos-reply-btn')) {
@@ -850,11 +857,20 @@
     
     // Insert the button
     try {
+      console.log('[Pajaritos] 🔍 Insert target:', {
+        tagName: insertTarget.tagName,
+        className: insertTarget.className?.substring(0, 50),
+        hasChildren: insertTarget.children.length,
+        firstChild: insertTarget.firstChild?.tagName
+      });
+      
       // Try to insert at the beginning of the target
       if (insertTarget.firstChild) {
         insertTarget.insertBefore(replyBtn, insertTarget.firstChild);
+        console.log('[Pajaritos] ✅ Button inserted before first child');
       } else {
         insertTarget.appendChild(replyBtn);
+        console.log('[Pajaritos] ✅ Button appended as first child');
       }
       
       // If inserted into postElement directly, add some positioning
@@ -862,17 +878,32 @@
         replyBtn.style.position = 'absolute';
         replyBtn.style.top = '10px';
         replyBtn.style.right = '10px';
+        replyBtn.style.zIndex = '999999';
         // Make sure post has relative positioning
         const postStyle = window.getComputedStyle(postElement);
         if (postStyle.position === 'static') {
           postElement.style.position = 'relative';
+          console.log('[Pajaritos] ✅ Set post element to position: relative');
         }
       }
+      
+      // Verify button is in DOM
+      setTimeout(() => {
+        const btnInDom = document.querySelector('.pajaritos-reply-btn');
+        if (btnInDom && postElement.contains(btnInDom)) {
+          console.log('[Pajaritos] ✅ Button verified in DOM and inside post element');
+          const rect = btnInDom.getBoundingClientRect();
+          console.log('[Pajaritos] 📍 Button position:', { top: rect.top, left: rect.left, width: rect.width, height: rect.height });
+        } else {
+          console.error('[Pajaritos] ❌ Button NOT found in DOM or not inside post element!');
+        }
+      }, 100);
       
       console.log('[Pajaritos] ✅ Button added to main post structure successfully');
       return true;
     } catch (error) {
       console.error('[Pajaritos] ❌ Error inserting button into post structure:', error);
+      console.error('[Pajaritos] ❌ Error stack:', error.stack);
       return false;
     }
   }
@@ -969,7 +1000,20 @@
         }
       }
 
-    console.log('[Pajaritos] 📍 Insert target:', insertTarget ? 'FOUND' : 'NOT FOUND', insertTarget?.tagName, insertTarget?.className);
+    console.log('[Pajaritos] 📍 Insert target:', insertTarget ? 'FOUND' : 'NOT FOUND');
+    if (insertTarget) {
+      const targetRect = insertTarget.getBoundingClientRect();
+      console.log('[Pajaritos] 📍 Insert target details:', {
+        tagName: insertTarget.tagName,
+        className: insertTarget.className?.substring(0, 80),
+        position: `(${Math.round(targetRect.left)}, ${Math.round(targetRect.top)})`,
+        size: `${Math.round(targetRect.width)}x${Math.round(targetRect.height)}`,
+        hasChildren: insertTarget.children.length
+      });
+    } else {
+      console.error('[Pajaritos] ❌ No insert target found - cannot create button!');
+      return false;
+    }
 
     // Create button
     const replyBtn = document.createElement('div');
@@ -3140,6 +3184,13 @@
     let searchScope = document;
     if (openModal) {
       console.log('[Pajaritos] 🎯 MODAL DETECTED - Only searching within modal, ignoring background posts');
+      const modalRect = openModal.getBoundingClientRect();
+      console.log('[Pajaritos] 📋 Modal details:', {
+        tagName: openModal.tagName,
+        ariaLabel: openModal.getAttribute('aria-label')?.substring(0, 50),
+        position: `(${Math.round(modalRect.left)}, ${Math.round(modalRect.top)})`,
+        size: `${Math.round(modalRect.width)}x${Math.round(modalRect.height)}`
+      });
       searchScope = openModal;
     } else {
       console.log('[Pajaritos] ℹ️ No modal detected, searching entire page');
@@ -3954,6 +4005,15 @@
     
     console.log(`[Pajaritos] 📊 After filtering: ${postsToProcess.length} main post(s)`);
     console.log(`[Pajaritos] 📊 mainPosts.length: ${mainPosts.length}, posts.length: ${posts.length}`);
+    if (postsToProcess.length === 0 && posts.length > 0) {
+      console.warn('[Pajaritos] ⚠️ All posts were filtered out! This might indicate a filtering issue.');
+      console.log('[Pajaritos] 🔍 Debug: Checking why posts were filtered...');
+      posts.slice(0, 3).forEach((p, idx) => {
+        const hasMainInput = p.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') !== null;
+        const isMain = isMainPost(p);
+        console.log(`[Pajaritos] 🔍 Post ${idx + 1}: isMainPost=${isMain}, hasMainInput=${hasMainInput}`);
+      });
+    }
     
     if (postsToProcess.length > 1) {
       console.log('[Pajaritos] 🔍 Debug: Multiple posts detected. Post details:');
@@ -3977,9 +4037,11 @@
       console.log(`[Pajaritos] 🔍 Processing post ${index + 1}/${postsToProcess.length}...`);
       logPostMetadata(post, `Post ${index + 1} (to process)`);
       
+      
       // Check if it has the main comment input (this identifies the actual main post)
       // Facebook uses different labels depending on context (e.g. "comentario público", "Escribe un comentario...")
       // EXPANDED SELECTORS: Added more variations to catch different Facebook UI versions
+      console.log(`[Pajaritos] 🔍 Post ${index + 1}: Searching for main comment input...`);
       const mainInputInPost =
         // Standard main comment input
         post.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') ||
@@ -4016,16 +4078,46 @@
         })();
       // Check if input is actually visible (not hidden)
       const hasMainInput = mainInputInPost !== null && mainInputInPost.offsetParent !== null;
+      console.log(`[Pajaritos] 🔍 Post ${index + 1}: mainInputInPost=${mainInputInPost ? 'FOUND' : 'NOT FOUND'}, hasMainInput=${hasMainInput}`);
+      if (mainInputInPost) {
+        const inputLabel = mainInputInPost.getAttribute('aria-label') || 
+                          mainInputInPost.getAttribute('aria-placeholder') || 
+                          mainInputInPost.getAttribute('placeholder') || 'no label';
+        const isVisible = mainInputInPost.offsetParent !== null;
+        const rect = mainInputInPost.getBoundingClientRect();
+        console.log(`[Pajaritos] 📋 Post ${index + 1} input details:`, {
+          label: inputLabel.substring(0, 50),
+          visible: isVisible,
+          position: `(${Math.round(rect.left)}, ${Math.round(rect.top)})`,
+          size: `${Math.round(rect.width)}x${Math.round(rect.height)}`
+        });
+      }
       
       // If input exists but is not visible, check if we can open it by clicking "Comentar"
       let canOpenInput = false;
       if (mainInputInPost && mainInputInPost.offsetParent === null) {
+        console.log(`[Pajaritos] 🔍 Post ${index + 1}: Input exists but is hidden, searching for "Comentar" button...`);
         const commentButton = findCommentButton(post);
         if (commentButton) {
           canOpenInput = true;
-          console.log('[Pajaritos] ℹ️ Comment input exists but is hidden, "Comentar" button found - can open it');
+          const btnLabel = commentButton.getAttribute('aria-label') || commentButton.textContent?.substring(0, 30) || 'no label';
+          console.log(`[Pajaritos] ✅ Post ${index + 1}: Comment input exists but is hidden, "Comentar" button found - can open it (label: ${btnLabel})`);
         } else {
-          console.log('[Pajaritos] ⚠️ Comment input exists but is hidden, and "Comentar" button not found');
+          console.log(`[Pajaritos] ⚠️ Post ${index + 1}: Comment input exists but is hidden, and "Comentar" button not found`);
+          // Log all buttons in post to help debug
+          const allButtons = post.querySelectorAll('button, [role="button"]');
+          console.log(`[Pajaritos] 🔍 Post ${index + 1}: Found ${allButtons.length} button(s) in post, checking for comment button...`);
+          allButtons.forEach((btn, btnIdx) => {
+            const btnText = btn.textContent?.toLowerCase() || '';
+            const btnAria = btn.getAttribute('aria-label')?.toLowerCase() || '';
+            if (btnText.includes('comentar') || btnText.includes('comment') || btnAria.includes('comentar') || btnAria.includes('comment')) {
+              console.log(`[Pajaritos] 🔍 Post ${index + 1}: Button ${btnIdx + 1} might be comment button:`, {
+                text: btn.textContent?.substring(0, 30),
+                ariaLabel: btn.getAttribute('aria-label')?.substring(0, 50),
+                className: btn.className?.substring(0, 50)
+              });
+            }
+          });
         }
       }
       
@@ -4085,7 +4177,15 @@
       // Only show button if input is visible OR can be opened via "Comentar" button
       const shouldShowButton = hasMainInput || canOpenInput || containsKnownInput || isNearKnownInput;
       
-      console.log(`[Pajaritos] 📋 Post ${index + 1} check: hasMainInput=${hasMainInput}, canOpenInput=${canOpenInput}, containsKnownInput=${containsKnownInput}, isNearKnownInput=${isNearKnownInput}, shouldShowButton=${shouldShowButton}`);
+      console.log(`[Pajaritos] 📋 Post ${index + 1} FINAL CHECK:`, {
+        hasMainInput,
+        canOpenInput,
+        containsKnownInput,
+        isNearKnownInput,
+        shouldShowButton,
+        isPermalinkPage,
+        postHasButton: post.querySelector('.pajaritos-reply-btn') !== null
+      });
       
       // On permalink pages, ONLY show button on posts with main input (the actual post being viewed)
       if (isPermalinkPage) {
@@ -4126,24 +4226,34 @@
       
       // Add button to this post
       if (!post.querySelector('.pajaritos-reply-btn')) {
-        console.log(`[Pajaritos] ✅ Adding button to main post${isPermalinkPage ? ' (permalink page)' : ''} - Post ${index + 1}`);
+        console.log(`[Pajaritos] ✅ Attempting to add button to post ${index + 1}${isPermalinkPage ? ' (permalink page)' : ''}`);
         const result = createReplyButton(post);
         if (!result) {
-          console.error('[Pajaritos] ❌ createReplyButton returned false - button was NOT created');
-          
-          // FALLBACK: If button wasn't created in comment section, add it to main post structure
-          console.log('[Pajaritos] 🔄 Fallback: Attempting to add button to main post structure...');
-          const fallbackResult = addButtonToMainPostStructure(post);
-          if (fallbackResult) {
-            console.log('[Pajaritos] ✅ Fallback successful - button added to main post structure');
-          } else {
-            console.log('[Pajaritos] ⚠️ Fallback also failed - button could not be added');
-          }
+          console.error(`[Pajaritos] ❌ Post ${index + 1}: createReplyButton returned false - button was NOT created`);
+          // Log post structure to help debug
+          const postRect = post.getBoundingClientRect();
+          console.log(`[Pajaritos] 🔍 Post ${index + 1} structure:`, {
+            position: `(${Math.round(postRect.left)}, ${Math.round(postRect.top)})`,
+            size: `${Math.round(postRect.width)}x${Math.round(postRect.height)}`,
+            hasCommentButton: findCommentButton(post) !== null,
+            hasActionButtons: post.querySelector('div[role="group"]') !== null || post.querySelector('div[role="toolbar"]') !== null,
+            childrenCount: post.children.length
+          });
         } else {
-          console.log('[Pajaritos] ✅ createReplyButton returned true - button should be created');
+          console.log(`[Pajaritos] ✅ Post ${index + 1}: createReplyButton returned true - button should be created`);
+          // Verify button was actually added
+          setTimeout(() => {
+            const addedBtn = post.querySelector('.pajaritos-reply-btn');
+            if (addedBtn) {
+              const btnRect = addedBtn.getBoundingClientRect();
+              console.log(`[Pajaritos] ✅ Post ${index + 1}: Button verified in DOM at position (${Math.round(btnRect.left)}, ${Math.round(btnRect.top)})`);
+            } else {
+              console.error(`[Pajaritos] ❌ Post ${index + 1}: Button NOT found in DOM after createReplyButton returned true!`);
+            }
+          }, 200);
         }
       } else {
-        console.log('[Pajaritos] ℹ️ Button already exists on this post');
+        console.log(`[Pajaritos] ℹ️ Post ${index + 1}: Button already exists on this post`);
       }
     });
     
