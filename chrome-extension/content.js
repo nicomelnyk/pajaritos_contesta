@@ -4310,7 +4310,7 @@
       }
       
       // Only show button if input is visible OR can be opened via "Comentar" button
-      const shouldShowButton = hasMainInput || canOpenInput || containsKnownInput || isNearKnownInput;
+      let shouldShowButton = hasMainInput || canOpenInput || containsKnownInput || isNearKnownInput;
       
       console.log(`[Pajaritos] 📋 Post ${index + 1} FINAL CHECK:`, {
         hasMainInput,
@@ -4380,20 +4380,11 @@
           if (isInModal && postsToProcess.length === 1) {
             console.log(`[Pajaritos] ⚠️ Post ${index + 1}: No input or "Comentar" button found, but it's the only post in modal - showing button anyway (last resort)`);
             shouldShowButton = true;
-        } else {
-          // LAST RESORT: If it's a modal and only one post, show button anyway
-          // The post is definitely the main one in a modal
-          const isInModal = post.closest('[role="dialog"]') !== null || 
-                           post.closest('[aria-modal="true"]') !== null;
-          if (isInModal && postsToProcess.length === 1) {
-            console.log(`[Pajaritos] ⚠️ Post ${index + 1}: No input or "Comentar" button found, but it's the only post in modal - showing button anyway (last resort)`);
-            shouldShowButton = true;
           } else {
             console.log(`[Pajaritos] ⏭️ Skipping post ${index + 1} (comment input not visible and cannot be opened)`);
             return; // Skip posts where comment section is not open and cannot be opened
           }
         }
-      }
       }
       
       // Add button to this post
