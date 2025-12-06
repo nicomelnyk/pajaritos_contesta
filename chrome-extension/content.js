@@ -940,11 +940,41 @@
   function createReplyButton(postElement) {
     console.log('[Pajaritos] 🔘 createReplyButton called for post:', postElement);
     
-    // Check if button already exists
+    // STRONGER CHECK: Check if button already exists anywhere near this post
+    // Check within post element
     if (postElement.querySelector('.pajaritos-reply-btn')) {
-      console.log('[Pajaritos] ⚠️ Button already exists, skipping');
+      console.log('[Pajaritos] ⚠️ Button already exists in post element, skipping');
       return false;
     }
+    
+    // Check in parent elements (buttons might be in parent containers)
+    let parent = postElement.parentElement;
+    let levels = 0;
+    while (parent && levels < 3) {
+      const btnInParent = parent.querySelector('.pajaritos-reply-btn');
+      if (btnInParent) {
+        // Check if this button is related to our post
+        const postRect = postElement.getBoundingClientRect();
+        const btnRect = btnInParent.getBoundingClientRect();
+        const distance = Math.abs(btnRect.top - postRect.bottom);
+        // If button is within 200px of the post, consider it a duplicate
+        if (distance < 200) {
+          console.log('[Pajaritos] ⚠️ Button already exists in parent container (distance:', Math.round(distance), 'px), skipping');
+          return false;
+        }
+      }
+      parent = parent.parentElement;
+      levels++;
+    }
+    
+    // Check if post has been marked as processed
+    if (postElement.dataset.pajaritosProcessed === 'true') {
+      console.log('[Pajaritos] ⚠️ Post already processed, skipping');
+      return false;
+    }
+    
+    // Mark post as processed
+    postElement.dataset.pajaritosProcessed = 'true';
 
     // Find where to insert the button (near comment button or action buttons)
     const commentButton = findCommentButton(postElement);
@@ -1085,27 +1115,45 @@
       if (parent) {
         parent.appendChild(replyBtn);
         console.log('[Pajaritos] ✅ Button inserted next to comment button (via parent)');
-        return true;
+        // Verify insertion immediately
+        if (parent.contains(replyBtn)) {
+          return true;
+        } else {
+          console.error('[Pajaritos] ❌ Button not found in parent after insertion!');
+          return false;
+        }
       } else {
         commentButton.insertAdjacentElement('afterend', replyBtn);
         console.log('[Pajaritos] ✅ Button inserted after comment button');
-        return true;
+        // Verify insertion
+        if (commentButton.nextElementSibling === replyBtn || commentButton.parentElement?.contains(replyBtn)) {
+          return true;
+        } else {
+          console.error('[Pajaritos] ❌ Button not found after comment button!');
+          return false;
+        }
       }
     } else if (insertTarget) {
       // Insert in action container
       try {
         insertTarget.appendChild(replyBtn);
         console.log('[Pajaritos] ✅ Button inserted in action container');
-        // Verify button is actually in DOM
-        setTimeout(() => {
+        // Verify button is actually in DOM immediately
+        if (insertTarget.contains(replyBtn)) {
+          console.log('[Pajaritos] ✅ Button verified in insertTarget immediately');
+          return true;
+        } else {
+          console.error('[Pajaritos] ❌ Button NOT found in insertTarget after insertion!');
+          // Try to find it elsewhere in document
           const btnInDom = document.querySelector('.pajaritos-reply-btn');
-          if (btnInDom) {
-            console.log('[Pajaritos] ✅ Button verified in DOM');
+          if (btnInDom && btnInDom === replyBtn) {
+            console.log('[Pajaritos] ⚠️ Button found in DOM but not in expected container');
+            return true;
           } else {
-            console.error('[Pajaritos] ❌ Button NOT found in DOM after insertion!');
+            console.error('[Pajaritos] ❌ Button completely missing from DOM!');
+            return false;
           }
-        }, 100);
-        return true;
+        }
       } catch (e) {
         console.error('[Pajaritos] ❌ Error inserting button:', e);
         return false;
@@ -4398,7 +4446,11 @@
       }
       
       // Add button to this post
-      if (!post.querySelector('.pajaritos-reply-btn')) {
+      // Check if button already exists (more thorough check)
+      const existingBtn = post.querySelector('.pajaritos-reply-btn') || 
+                         post.closest('div[role="article"]')?.querySelector('.pajaritos-reply-btn');
+      
+      if (!existingBtn && post.dataset.pajaritosProcessed !== 'true') {
         console.log(`[Pajaritos] ✅ Attempting to add button to post ${index + 1}${isPermalinkPage ? ' (permalink page)' : ''}`);
         const result = createReplyButton(post);
         if (!result) {
@@ -4414,24 +4466,102 @@
           });
         } else {
           console.log(`[Pajaritos] ✅ Post ${index + 1}: createReplyButton returned true - button should be created`);
-          // Verify button was actually added
+          // Verify button was actually added - check in post and parent containers
           setTimeout(() => {
-            const addedBtn = post.querySelector('.pajaritos-reply-btn');
+            // Search more broadly - button might be in parent containers
+            let addedBtn = post.querySelector('.pajaritos-reply-btn');
+            if (!addedBtn) {
+              // Check parent elements (button might be inserted in parent)
+              let parent = post.parentElement;
+              let levels = 0;
+              while (parent && levels < 3 && !addedBtn) {
+                addedBtn = parent.querySelector('.pajaritos-reply-btn');
+                if (addedBtn) {
+                  // Verify it's related to this post (check if post contains the button's container)
+                  const btnContainer = addedBtn.closest('div[role="article"]') || 
+                                      addedBtn.closest('div[data-ad-preview="message"]');
+                  if (btnContainer && (btnContainer === post || post.contains(btnContainer))) {
+                    break; // Found it
+                  } else {
+                    addedBtn = null; // Not related to this post
+                  }
+                }
+                parent = parent.parentElement;
+                levels++;
+              }
+            }
+            
+            // Also check document-wide but near the post
+            if (!addedBtn) {
+              const postRect = post.getBoundingClientRect();
+              const allButtons = document.querySelectorAll('.pajaritos-reply-btn');
+              for (const btn of allButtons) {
+                const btnRect = btn.getBoundingClientRect();
+                const distance = Math.abs(btnRect.top - postRect.bottom);
+                // If button is within 300px of the post, consider it related
+                if (distance < 300 && Math.abs(btnRect.left - postRect.left) < 500) {
+                  addedBtn = btn;
+                  console.log(`[Pajaritos] ✅ Post ${index + 1}: Found button in nearby container (distance: ${Math.round(distance)}px)`);
+                  break;
+                }
+              }
+            }
+            
             if (addedBtn) {
               const btnRect = addedBtn.getBoundingClientRect();
               console.log(`[Pajaritos] ✅ Post ${index + 1}: Button verified in DOM at position (${Math.round(btnRect.left)}, ${Math.round(btnRect.top)})`);
             } else {
               console.error(`[Pajaritos] ❌ Post ${index + 1}: Button NOT found in DOM after createReplyButton returned true!`);
+              console.error(`[Pajaritos] 🔍 Debug: Post element:`, {
+                tagName: post.tagName,
+                className: post.className?.substring(0, 50),
+                hasChildren: post.children.length,
+                textPreview: post.textContent?.substring(0, 50)
+              });
+              // Check if button exists anywhere in document
+              const allButtons = document.querySelectorAll('.pajaritos-reply-btn');
+              console.error(`[Pajaritos] 🔍 Debug: Found ${allButtons.length} button(s) total in document`);
             }
-          }, 200);
+          }, 300); // Increased delay to 300ms
         }
       } else {
         console.log(`[Pajaritos] ℹ️ Post ${index + 1}: Button already exists on this post`);
       }
     });
     
-    // Cleanup: Remove buttons that were incorrectly added to comment reply inputs
+    // Cleanup: Remove duplicate buttons and buttons incorrectly placed
     const allButtons = document.querySelectorAll('.pajaritos-reply-btn');
+    console.log(`[Pajaritos] 🧹 Cleanup: Found ${allButtons.length} button(s) total`);
+    
+    // Track buttons by their post to remove duplicates
+    const buttonsByPost = new Map();
+    
+    allButtons.forEach(btn => {
+      // Find the post/article this button belongs to
+      const post = btn.closest('div[role="article"]') || 
+                   btn.closest('div[data-ad-preview="message"]') ||
+                   btn.closest('div[data-ad-comet-preview="message"]');
+      
+      if (post) {
+        if (!buttonsByPost.has(post)) {
+          buttonsByPost.set(post, []);
+        }
+        buttonsByPost.get(post).push(btn);
+      }
+    });
+    
+    // Remove duplicate buttons (keep only the first one per post)
+    buttonsByPost.forEach((buttons, post) => {
+      if (buttons.length > 1) {
+        console.log(`[Pajaritos] 🗑️ Removing ${buttons.length - 1} duplicate button(s) from post`);
+        // Keep the first button, remove the rest
+        for (let i = 1; i < buttons.length; i++) {
+          buttons[i].remove();
+        }
+      }
+    });
+    
+    // Also check for buttons incorrectly placed in comment replies
     allButtons.forEach(btn => {
       // Find the nearest input field
       const modal = btn.closest('[role="dialog"]');
@@ -4516,6 +4646,29 @@
   const observer = new MutationObserver((mutations) => {
     // Skip if we're already adding buttons (prevents loop)
     if (isAddingButtons) {
+      return;
+    }
+    
+    // Add a small delay to let any button additions complete
+    let hasOurButtons = false;
+    mutations.forEach(mutation => {
+      if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            // Check if this mutation is from our button
+            if (node.classList?.contains('pajaritos-reply-btn') || 
+                node.querySelector?.('.pajaritos-reply-btn') ||
+                node.closest?.('.pajaritos-reply-btn')) {
+              hasOurButtons = true;
+              break;
+            }
+          }
+        }
+      }
+    });
+    
+    // If mutations are from our buttons, ignore them completely
+    if (hasOurButtons) {
       return;
     }
     
