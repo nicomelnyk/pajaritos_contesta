@@ -707,6 +707,176 @@
     }
   }
 
+  // Fallback: Add button to main post structure (when comment section approach fails)
+  function addButtonToMainPostStructure(postElement) {
+    console.log('[Pajaritos] 🔘 addButtonToMainPostStructure called for post:', postElement);
+    
+    // Check if button already exists
+    if (postElement.querySelector('.pajaritos-reply-btn')) {
+      console.log('[Pajaritos] ⚠️ Button already exists in post structure, skipping');
+      return false;
+    }
+    
+    // Strategy 1: Try to find the post header area (where author name, timestamp, etc. are)
+    const headerSelectors = [
+      'div[role="article"] > div:first-child', // First child of article
+      'div[data-pagelet*="FeedUnit"] > div:first-child',
+      'h3', // Author name is usually in h3
+      'div[dir="auto"]', // Text containers
+      'span[dir="auto"]'
+    ];
+    
+    let insertTarget = null;
+    
+    // Try to find header area
+    for (const selector of headerSelectors) {
+      const element = postElement.querySelector(selector);
+      if (element) {
+        // Check if it's near the top of the post (likely header)
+        const rect = element.getBoundingClientRect();
+        const postRect = postElement.getBoundingClientRect();
+        const isNearTop = rect.top - postRect.top < 200; // Within 200px of top
+        
+        if (isNearTop) {
+          // Try to find a container that has the header and some space for our button
+          let container = element.parentElement;
+          if (container && container !== postElement) {
+            insertTarget = container;
+            console.log('[Pajaritos] ✅ Found header container for button insertion');
+            break;
+          }
+        }
+      }
+    }
+    
+    // Strategy 2: Find the post content area (where the post text is)
+    if (!insertTarget) {
+      const contentSelectors = [
+        'div[data-ad-preview="message"]',
+        'div[data-ad-comet-preview="message"]',
+        'div[dir="auto"]:not([role="button"])', // Text content, not buttons
+        'span[dir="auto"]:not([role="button"])'
+      ];
+      
+      for (const selector of contentSelectors) {
+        const element = postElement.querySelector(selector);
+        if (element) {
+          // Find a parent container that can hold our button
+          let container = element.parentElement;
+          let levels = 0;
+          while (container && container !== postElement && levels < 5) {
+            // Check if container has enough space and is visible
+            const rect = container.getBoundingClientRect();
+            if (rect.width > 100 && rect.height > 20) {
+              insertTarget = container;
+              console.log('[Pajaritos] ✅ Found content container for button insertion');
+              break;
+            }
+            container = container.parentElement;
+            levels++;
+          }
+          if (insertTarget) break;
+        }
+      }
+    }
+    
+    // Strategy 3: Find any visible container near the top of the post
+    if (!insertTarget) {
+      const allDivs = Array.from(postElement.querySelectorAll('div'));
+      for (const div of allDivs) {
+        const rect = div.getBoundingClientRect();
+        const postRect = postElement.getBoundingClientRect();
+        const isNearTop = rect.top - postRect.top < 300; // Within 300px of top
+        const isVisible = rect.width > 50 && rect.height > 20;
+        const hasContent = div.textContent && div.textContent.trim().length > 0;
+        
+        if (isNearTop && isVisible && hasContent) {
+          // Check if it's not a button or input
+          const isInteractive = div.querySelector('button, [role="button"], input, textarea') !== null;
+          if (!isInteractive) {
+            insertTarget = div;
+            console.log('[Pajaritos] ✅ Found fallback container near top of post');
+            break;
+          }
+        }
+      }
+    }
+    
+    // Strategy 4: Last resort - insert at the beginning of the post element itself
+    if (!insertTarget) {
+      insertTarget = postElement;
+      console.log('[Pajaritos] ⚠️ Using post element itself as last resort');
+    }
+    
+    // Create and insert the button
+    const replyBtn = document.createElement('div');
+    replyBtn.className = 'pajaritos-reply-btn';
+    replyBtn.innerHTML = '🐦';
+    replyBtn.style.cssText = `
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #1877f2 0%, #42b72a 100%);
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      margin: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      transition: transform 0.2s, box-shadow 0.2s;
+      z-index: 10000;
+      position: relative;
+    `;
+    
+    replyBtn.title = 'Voluntarios de Guardia - Responder';
+    
+    replyBtn.addEventListener('mouseenter', () => {
+      replyBtn.style.transform = 'scale(1.1)';
+      replyBtn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.25)';
+    });
+    
+    replyBtn.addEventListener('mouseleave', () => {
+      replyBtn.style.transform = 'scale(1)';
+      replyBtn.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+    });
+    
+    replyBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      showReplyForm(postElement, replyBtn);
+    });
+    
+    // Insert the button
+    try {
+      // Try to insert at the beginning of the target
+      if (insertTarget.firstChild) {
+        insertTarget.insertBefore(replyBtn, insertTarget.firstChild);
+      } else {
+        insertTarget.appendChild(replyBtn);
+      }
+      
+      // If inserted into postElement directly, add some positioning
+      if (insertTarget === postElement) {
+        replyBtn.style.position = 'absolute';
+        replyBtn.style.top = '10px';
+        replyBtn.style.right = '10px';
+        // Make sure post has relative positioning
+        const postStyle = window.getComputedStyle(postElement);
+        if (postStyle.position === 'static') {
+          postElement.style.position = 'relative';
+        }
+      }
+      
+      console.log('[Pajaritos] ✅ Button added to main post structure successfully');
+      return true;
+    } catch (error) {
+      console.error('[Pajaritos] ❌ Error inserting button into post structure:', error);
+      return false;
+    }
+  }
+
   // Create reply button for a post
   function createReplyButton(postElement) {
     console.log('[Pajaritos] 🔘 createReplyButton called for post:', postElement);
@@ -2946,6 +3116,11 @@
     });
   }
 
+  // Track retry attempts for permalink pages
+  let permalinkRetryCount = 0;
+  const MAX_PERMALINK_RETRIES = 3;
+  let permalinkRetryTimer = null;
+
   // Add buttons to all posts
   function addButtonsToPosts() {
     try {
@@ -3804,6 +3979,7 @@
       
       // Check if it has the main comment input (this identifies the actual main post)
       // Facebook uses different labels depending on context (e.g. "comentario público", "Escribe un comentario...")
+      // EXPANDED SELECTORS: Added more variations to catch different Facebook UI versions
       const mainInputInPost =
         // Standard main comment input
         post.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') ||
@@ -3816,7 +3992,28 @@
         // Generic English variants
         post.querySelector('div[contenteditable="true"][aria-label*="Write a comment"]') ||
         post.querySelector('div[contenteditable="true"][aria-placeholder*="Write a comment"]') ||
-        post.querySelector('div[contenteditable="true"][placeholder*="Write a comment"]');
+        post.querySelector('div[contenteditable="true"][placeholder*="Write a comment"]') ||
+        // Additional variations for different Facebook UI versions
+        post.querySelector('div[contenteditable="true"][aria-label*="Escribe una respuesta"]') ||
+        post.querySelector('div[contenteditable="true"][aria-label*="Write a response"]') ||
+        post.querySelector('div[contenteditable="true"][data-testid*="comment"]') ||
+        // Fallback: any contenteditable that's not in a reply structure
+        (() => {
+          const allInputs = post.querySelectorAll('div[contenteditable="true"]');
+          for (const input of allInputs) {
+            // Skip if it's in a reply structure
+            if (input.closest('[aria-label*="Responder"], [aria-label*="Reply"]')) continue;
+            if (input.closest('div[data-testid*="comment_replies"]')) continue;
+            // Check if it has a placeholder that suggests it's a main comment input
+            const label = (input.getAttribute('aria-label') || 
+                          input.getAttribute('aria-placeholder') || 
+                          input.getAttribute('placeholder') || '').toLowerCase();
+            if (label.includes('escribe') || label.includes('write') || label.includes('comentario') || label.includes('comment')) {
+              return input;
+            }
+          }
+          return null;
+        })();
       // Check if input is actually visible (not hidden)
       const hasMainInput = mainInputInPost !== null && mainInputInPost.offsetParent !== null;
       
@@ -3893,14 +4090,31 @@
       // On permalink pages, ONLY show button on posts with main input (the actual post being viewed)
       if (isPermalinkPage) {
         if (!shouldShowButton) {
-          // Remove button if it exists (this is a background/suggested post)
-          const existingBtn = post.querySelector('.pajaritos-reply-btn');
-          if (existingBtn) {
-            console.log('[Pajaritos] 🗑️ Removing button from background post (no main input)');
-            existingBtn.remove();
+          // FALLBACK: If this is the only post on a permalink page, it's definitely the main post
+          // Some users have different Facebook UI where inputs aren't detected immediately
+          if (postsToProcess.length === 1) {
+            console.log('[Pajaritos] ⚠️ Permalink page: Input not detected, but this is the only post - showing button anyway (fallback)');
+            // Try to find "Comentar" button as additional confirmation
+            const commentButton = findCommentButton(post);
+            if (commentButton) {
+              console.log('[Pajaritos] ✅ Found "Comentar" button - confirming this is the main post');
+              // Override shouldShowButton for this case
+              shouldShowButton = true;
+            } else {
+              // Even without "Comentar" button, if it's the only post on permalink, it's the main one
+              console.log('[Pajaritos] ⚠️ No "Comentar" button found, but showing button anyway (only post on permalink)');
+              shouldShowButton = true;
+            }
+          } else {
+            // Multiple posts - this might be a background/suggested post
+            const existingBtn = post.querySelector('.pajaritos-reply-btn');
+            if (existingBtn) {
+              console.log('[Pajaritos] 🗑️ Removing button from background post (no main input)');
+              existingBtn.remove();
+            }
+            console.log(`[Pajaritos] ⏭️ Skipping post ${index + 1} (no main input on permalink page)`);
+            return; // Skip posts without main input on permalink pages
           }
-          console.log(`[Pajaritos] ⏭️ Skipping post ${index + 1} (no main input on permalink page)`);
-          return; // Skip posts without main input on permalink pages
         }
       }
       
@@ -3916,6 +4130,15 @@
         const result = createReplyButton(post);
         if (!result) {
           console.error('[Pajaritos] ❌ createReplyButton returned false - button was NOT created');
+          
+          // FALLBACK: If button wasn't created in comment section, add it to main post structure
+          console.log('[Pajaritos] 🔄 Fallback: Attempting to add button to main post structure...');
+          const fallbackResult = addButtonToMainPostStructure(post);
+          if (fallbackResult) {
+            console.log('[Pajaritos] ✅ Fallback successful - button added to main post structure');
+          } else {
+            console.log('[Pajaritos] ⚠️ Fallback also failed - button could not be added');
+          }
         } else {
           console.log('[Pajaritos] ✅ createReplyButton returned true - button should be created');
         }
@@ -3956,6 +4179,35 @@
         }
       }
     });
+    
+    // RETRY LOGIC FOR PERMALINK PAGES: If no button was added and we're on a permalink page,
+    // retry after a delay to catch lazy-loaded inputs
+    if (isPermalinkPage && permalinkRetryCount < MAX_PERMALINK_RETRIES) {
+      const hasButton = document.querySelector('.pajaritos-reply-btn');
+      if (!hasButton) {
+        permalinkRetryCount++;
+        const retryDelay = permalinkRetryCount * 1000; // 1s, 2s, 3s
+        console.log(`[Pajaritos] 🔄 Permalink page: No button found, retrying in ${retryDelay}ms (attempt ${permalinkRetryCount}/${MAX_PERMALINK_RETRIES})`);
+        
+        if (permalinkRetryTimer) {
+          clearTimeout(permalinkRetryTimer);
+        }
+        permalinkRetryTimer = setTimeout(() => {
+          addButtonsToPosts();
+        }, retryDelay);
+        return; // Exit early, will retry
+      } else {
+        // Button found, reset retry count
+        permalinkRetryCount = 0;
+        if (permalinkRetryTimer) {
+          clearTimeout(permalinkRetryTimer);
+          permalinkRetryTimer = null;
+        }
+      }
+    } else if (!isPermalinkPage) {
+      // Reset retry count when not on permalink page
+      permalinkRetryCount = 0;
+    }
     } catch (error) {
       console.error('[Pajaritos] Error in addButtonsToPosts:', error);
     }
