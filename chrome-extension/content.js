@@ -561,39 +561,55 @@
   function addButtonNearCommentInput(commentInput) {
     console.log('[Pajaritos] 🔘 addButtonNearCommentInput called for input:', commentInput);
     
-    // Check if button already exists near this input
-    const existingBtn = commentInput.closest('[role="dialog"]')?.querySelector('.pajaritos-reply-btn') ||
-                       commentInput.parentElement?.querySelector('.pajaritos-reply-btn');
+    // Check if button already exists DIRECTLY near this specific input
+    // Check in the input's immediate container and siblings
+    const inputContainer = commentInput.parentElement;
+    const existingBtn = inputContainer?.querySelector('.pajaritos-reply-btn') ||
+                       commentInput.nextElementSibling?.classList?.contains('pajaritos-reply-btn') ? commentInput.nextElementSibling : null ||
+                       commentInput.previousElementSibling?.classList?.contains('pajaritos-reply-btn') ? commentInput.previousElementSibling : null;
+    
     if (existingBtn) {
-      console.log('[Pajaritos] ⚠️ Button already exists near input, skipping');
+      console.log('[Pajaritos] ⚠️ Button already exists directly near this input, skipping');
       return false;
     }
     
-    // Find a good place to insert the button - try multiple strategies
+    // Find a good place to insert the button - prioritize being RIGHT NEXT TO the input
     let insertTarget = null;
+    let insertMethod = null; // 'after', 'before', or 'append'
     
-    // Strategy 1: Find the input's parent container (usually has other buttons/icons)
-    const inputContainer = commentInput.parentElement;
-    if (inputContainer) {
-      // Check if container has other buttons (like emoji, photo, etc.)
-      const hasOtherButtons = inputContainer.querySelectorAll('button, [role="button"]').length > 0;
-      if (hasOtherButtons) {
-        insertTarget = inputContainer;
-        console.log('[Pajaritos] ✅ Found input container with other buttons');
-      } else {
-        // Try parent's parent
-        const grandParent = inputContainer.parentElement;
-        if (grandParent) {
-          const hasButtons = grandParent.querySelectorAll('button, [role="button"]').length > 0;
-          if (hasButtons) {
-            insertTarget = grandParent;
-            console.log('[Pajaritos] ✅ Found grandparent container with buttons');
+    // Strategy 1: Insert directly after the input element (best option)
+    if (commentInput.parentElement) {
+      insertTarget = commentInput.parentElement;
+      insertMethod = 'after';
+      console.log('[Pajaritos] ✅ Will insert button directly after input element');
+    }
+    
+    // Strategy 2: If parent doesn't work, try inserting in the input's container (with other buttons/icons)
+    if (!insertTarget) {
+      const inputContainer = commentInput.parentElement;
+      if (inputContainer) {
+        // Check if container has other buttons (like emoji, photo, etc.) - this is the toolbar
+        const hasOtherButtons = inputContainer.querySelectorAll('button, [role="button"]').length > 0;
+        if (hasOtherButtons) {
+          insertTarget = inputContainer;
+          insertMethod = 'append';
+          console.log('[Pajaritos] ✅ Found input container with other buttons (toolbar)');
+        } else {
+          // Try parent's parent
+          const grandParent = inputContainer.parentElement;
+          if (grandParent) {
+            const hasButtons = grandParent.querySelectorAll('button, [role="button"]').length > 0;
+            if (hasButtons) {
+              insertTarget = grandParent;
+              insertMethod = 'append';
+              console.log('[Pajaritos] ✅ Found grandparent container with buttons');
+            }
           }
         }
       }
     }
     
-    // Strategy 2: Find sibling elements that might be a toolbar
+    // Strategy 3: Find sibling elements that might be a toolbar
     if (!insertTarget) {
       const inputParent = commentInput.parentElement;
       if (inputParent) {
@@ -604,15 +620,29 @@
         });
         if (toolbarSibling) {
           insertTarget = toolbarSibling;
+          insertMethod = 'append';
           console.log('[Pajaritos] ✅ Found toolbar sibling');
         }
       }
     }
     
-    // Strategy 3: Insert before or after the input
+    // Strategy 4: Insert directly after the input element (PREFERRED - right next to input)
+    if (!insertTarget || insertMethod !== 'after') {
+      // Try to insert right after the input element itself
+      const inputParent = commentInput.parentElement;
+      if (inputParent) {
+        // Check if we can insert as a sibling right after the input
+        insertTarget = inputParent;
+        insertMethod = 'after';
+        console.log('[Pajaritos] ✅ Will insert button directly after input element (preferred method)');
+      }
+    }
+    
+    // Final fallback: Use input parent
     if (!insertTarget) {
       insertTarget = commentInput.parentElement;
-      console.log('[Pajaritos] ✅ Using input parent as fallback');
+      insertMethod = 'append';
+      console.log('[Pajaritos] ✅ Using input parent as final fallback');
     }
     
     if (!insertTarget) {
@@ -4187,10 +4217,9 @@
       logPostMetadata(post, `Post ${index + 1} (to process)`);
       
       
-      // Check if it has the main comment input (this identifies the actual main post)
-      // Facebook uses different labels depending on context (e.g. "comentario público", "Escribe un comentario...", "Responder como...")
-      // EXPANDED SELECTORS: Added more variations to catch different Facebook UI versions
-      console.log(`[Pajaritos] 🔍 Post ${index + 1}: Searching for main comment input...`);
+      // PRIORITY 1: Check for "Responder como..." input FIRST (this is the preferred location)
+      // PRIORITY 2: Fallback to "Comentar" button only if input not found
+      console.log(`[Pajaritos] 🔍 Post ${index + 1}: Searching for main comment input (PRIORITY 1: "Responder como...")...`);
       const mainInputInPost =
         // Standard main comment input
         post.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') ||
@@ -4445,13 +4474,34 @@
         }
       }
       
-      // Add button to this post
+      // PRIORITY 1: If we found the "Responder como..." input, use it FIRST
+      // Only fall back to "Comentar" button if input is not found
+      let buttonAdded = false;
+      
+      // Check if we have a main input in this post - use it FIRST
+      if (mainInputInPost && hasMainInput) {
+        console.log(`[Pajaritos] 🎯 Post ${index + 1}: Found "Responder como..." input - using it as FIRST option`);
+        const inputLabel = mainInputInPost.getAttribute('aria-label') || 
+                          mainInputInPost.getAttribute('aria-placeholder') || '';
+        if (inputLabel.toLowerCase().includes('responder como')) {
+          // Use addButtonNearCommentInput to place button right next to input
+          buttonAdded = addButtonNearCommentInput(mainInputInPost);
+          if (buttonAdded) {
+            console.log(`[Pajaritos] ✅ Post ${index + 1}: Button added next to "Responder como..." input (PRIORITY 1)`);
+            // Mark post as processed
+            post.dataset.pajaritosProcessed = 'true';
+            return; // Skip the rest - we're done with this post
+          }
+        }
+      }
+      
+      // PRIORITY 2: Fallback to "Comentar" button only if input approach didn't work
       // Check if button already exists (more thorough check)
       const existingBtn = post.querySelector('.pajaritos-reply-btn') || 
                          post.closest('div[role="article"]')?.querySelector('.pajaritos-reply-btn');
       
-      if (!existingBtn && post.dataset.pajaritosProcessed !== 'true') {
-        console.log(`[Pajaritos] ✅ Attempting to add button to post ${index + 1}${isPermalinkPage ? ' (permalink page)' : ''}`);
+      if (!existingBtn && post.dataset.pajaritosProcessed !== 'true' && !buttonAdded) {
+        console.log(`[Pajaritos] 🔄 Post ${index + 1}: No input found or input approach failed, trying "Comentar" button as FALLBACK`);
         const result = createReplyButton(post);
         if (!result) {
           console.error(`[Pajaritos] ❌ Post ${index + 1}: createReplyButton returned false - button was NOT created`);
