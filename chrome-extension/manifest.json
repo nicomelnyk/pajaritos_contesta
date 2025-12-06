@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Voluntarios de Guardia",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "description": "Herramienta de asistencia para responder publicaciones de Facebook con respuestas predefinidas sobre cuidado de aves",
   "permissions": [
     "storage",

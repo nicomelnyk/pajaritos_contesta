@@ -3038,6 +3038,8 @@
     
     // Also check if there's a MAIN POST comment input field
     // Main posts have "Escribe un comentario público..." (Write a public comment...)
+    // IMPORTANT: "Responder como..." can be main post input OR comment reply input
+    // We need to check if it's NOT nested in a comment reply structure
     const mainPostInputSelectors = [
       'div[contenteditable="true"][aria-label*="comentario público"]',
       'div[contenteditable="true"][aria-label*="comentario publico"]',
@@ -3056,6 +3058,28 @@
         }
       } catch (e) {
         continue;
+      }
+    }
+    
+    // Also check for "Responder como..." but only if it's NOT in a comment reply structure
+    if (!hasMainPostInput) {
+      const responderInputs = element.querySelectorAll('div[contenteditable="true"][aria-label*="Responder como"], div[contenteditable="true"][aria-placeholder*="Responder como"]');
+      for (const input of responderInputs) {
+        // Check if it's in a comment reply structure
+        const isInReply = input.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== input &&
+                         input.closest('div[data-testid*="comment_replies"]') !== null;
+        // Check if it's nested inside another article (likely a comment)
+        const parentArticle = input.closest('div[role="article"]');
+        const isNestedInComment = parentArticle && 
+                                 Array.from(element.querySelectorAll('div[role="article"]')).some(article => 
+                                   article !== parentArticle && article.contains(parentArticle)
+                                 );
+        
+        // If it's NOT in a reply structure and NOT nested in a comment, it's the main post input
+        if (!isInReply && !isNestedInComment) {
+          hasMainPostInput = true;
+          break;
+        }
       }
     }
     
@@ -3319,7 +3343,25 @@
         mainCommentInput = document.querySelector('div[contenteditable="true"][aria-label*="Escribe una respuesta"]') ||
                           document.querySelector('div[contenteditable="true"][aria-label*="Escribe un comentario"]') ||
                           document.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') ||
-                          document.querySelector('div[contenteditable="true"][aria-placeholder*="comentario público"]');
+                          document.querySelector('div[contenteditable="true"][aria-placeholder*="comentario público"]') ||
+                          // Check for "Responder como..." but only if it's NOT in a comment reply structure
+                          (() => {
+                            const responderInputs = document.querySelectorAll('div[contenteditable="true"][aria-label*="Responder como"], div[contenteditable="true"][aria-placeholder*="Responder como"]');
+                            for (const input of responderInputs) {
+                              const isInReply = input.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== input &&
+                                               input.closest('div[data-testid*="comment_replies"]') !== null;
+                              const parentArticle = input.closest('div[role="article"]');
+                              const isNestedInComment = parentArticle && 
+                                                       Array.from(document.querySelectorAll('div[role="article"]')).some(article => 
+                                                         article !== parentArticle && article.contains(parentArticle)
+                                                       );
+                              if (!isInReply && !isNestedInComment) {
+                                console.log('[Pajaritos] ✅ Found "Responder como..." input that is NOT in a comment reply structure - treating as main post input');
+                                return input;
+                              }
+                            }
+                            return null;
+                          })();
       }
       
       // Last resort: any contenteditable div that's likely a comment input (not in a comment reply)
@@ -3328,13 +3370,25 @@
         const allInputs = searchArea.querySelectorAll('div[contenteditable="true"]');
         console.log('[Pajaritos] 🔍 DEBUG: Fallback search - checking', allInputs.length, 'contenteditable div(s)');
         for (const input of allInputs) {
-          // Skip if it's inside a comment reply structure
-          if (input.closest('[aria-label*="Responder"], [aria-label*="Reply"]')) continue;
-          // Skip if it has a very specific comment reply indicator
-          if (input.closest('div[data-testid*="comment_replies"]')) continue;
+          // Check if it's in a comment reply structure (nested inside another comment)
+          const isInReply = input.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== input &&
+                           input.closest('div[data-testid*="comment_replies"]') !== null;
+          // Check if it's nested inside another article (likely a comment)
+          const parentArticle = input.closest('div[role="article"]');
+          const isNestedInComment = parentArticle && 
+                                   Array.from(searchArea.querySelectorAll('div[role="article"]')).some(article => 
+                                     article !== parentArticle && article.contains(parentArticle)
+                                   );
+          
+          // Skip if it's in a reply structure
+          if (isInReply || isNestedInComment) continue;
+          
           // If it's in the modal and not in a reply, it's likely the main input
           const placeholder = input.getAttribute('aria-label') || input.getAttribute('aria-placeholder') || input.getAttribute('placeholder') || '';
-          if (placeholder.toLowerCase().includes('escribe') || placeholder.toLowerCase().includes('write')) {
+          // "Responder como..." can be main post input if it's NOT in a comment reply structure
+          if (placeholder.toLowerCase().includes('escribe') || 
+              placeholder.toLowerCase().includes('write') || 
+              placeholder.toLowerCase().includes('responder como')) {
             mainCommentInput = input;
             console.log('[Pajaritos] ✅ Found input via fallback search:', placeholder.substring(0, 50));
             break;
@@ -3397,11 +3451,16 @@
           const inputLabel = mainCommentInput.getAttribute('aria-label') || 
                             mainCommentInput.getAttribute('aria-placeholder') || 
                             mainCommentInput.getAttribute('placeholder') || '';
-          const isMainInput = inputLabel.toLowerCase().includes('escribe una respuesta') ||
+          // "Responder como..." can be main post input if it's NOT in a comment reply structure
+          const isReplyInput = mainCommentInput.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== mainCommentInput &&
+                              mainCommentInput.closest('div[data-testid*="comment_replies"]') !== null;
+          const isMainInput = !isReplyInput && (
+                             inputLabel.toLowerCase().includes('escribe una respuesta') ||
                              inputLabel.toLowerCase().includes('escribe un comentario') ||
                              inputLabel.toLowerCase().includes('comentario público') ||
                              inputLabel.toLowerCase().includes('public comment') ||
-                             inputLabel.toLowerCase().includes('write a response');
+                             inputLabel.toLowerCase().includes('write a response') ||
+                             inputLabel.toLowerCase().includes('responder como'));
           
           if (isMainInput) {
             console.log('[Pajaritos] 🎯 Trying new approach: Adding button near main comment input...');
@@ -3897,12 +3956,18 @@
           const inputLabel = fallbackInput.getAttribute('aria-label') || 
                             fallbackInput.getAttribute('aria-placeholder') || 
                             fallbackInput.getAttribute('placeholder') || '';
-          const isMainInput = inputLabel.toLowerCase().includes('escribe una respuesta') ||
+          
+          // "Responder como..." can be main post input if it's NOT in a comment reply structure
+          const isReplyInput = fallbackInput.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== fallbackInput &&
+                              fallbackInput.closest('div[data-testid*="comment_replies"]') !== null;
+          const isMainInput = !isReplyInput && (
+                             inputLabel.toLowerCase().includes('escribe una respuesta') ||
                              inputLabel.toLowerCase().includes('escribe un comentario') ||
                              inputLabel.toLowerCase().includes('comentario público') ||
                              inputLabel.toLowerCase().includes('public comment') ||
                              inputLabel.toLowerCase().includes('write a response') ||
-                             inputLabel.toLowerCase().includes('write a comment');
+                             inputLabel.toLowerCase().includes('write a comment') ||
+                             inputLabel.toLowerCase().includes('responder como'));
           
           if (isMainInput) {
             console.log('[Pajaritos] ✅ Found comment input in document (last resort), label:', inputLabel.substring(0, 50));
@@ -4067,7 +4132,7 @@
       
       
       // Check if it has the main comment input (this identifies the actual main post)
-      // Facebook uses different labels depending on context (e.g. "comentario público", "Escribe un comentario...")
+      // Facebook uses different labels depending on context (e.g. "comentario público", "Escribe un comentario...", "Responder como...")
       // EXPANDED SELECTORS: Added more variations to catch different Facebook UI versions
       console.log(`[Pajaritos] 🔍 Post ${index + 1}: Searching for main comment input...`);
       const mainInputInPost =
@@ -4087,19 +4152,50 @@
         post.querySelector('div[contenteditable="true"][aria-label*="Escribe una respuesta"]') ||
         post.querySelector('div[contenteditable="true"][aria-label*="Write a response"]') ||
         post.querySelector('div[contenteditable="true"][data-testid*="comment"]') ||
+        // IMPORTANT: "Responder como..." can be main post input OR comment reply input
+        // We need to check if it's NOT nested in a comment reply structure
+        (() => {
+          const responderInputs = post.querySelectorAll('div[contenteditable="true"][aria-label*="Responder como"], div[contenteditable="true"][aria-placeholder*="Responder como"]');
+          for (const input of responderInputs) {
+            // Check if it's in a comment reply structure (nested inside another comment)
+            const isInReply = input.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== input &&
+                             input.closest('div[data-testid*="comment_replies"]') !== null;
+            // Check if it's nested inside another article (likely a comment)
+            const parentArticle = input.closest('div[role="article"]');
+            const postArticle = post.closest('div[role="article"]') || post;
+            const isNestedInComment = parentArticle && parentArticle !== postArticle && 
+                                     postArticle.contains(parentArticle);
+            
+            // If it's NOT in a reply structure and NOT nested in a comment, it's the main post input
+            if (!isInReply && !isNestedInComment) {
+              console.log(`[Pajaritos] ✅ Post ${index + 1}: Found "Responder como..." input that is NOT in a comment reply structure - treating as main post input`);
+              return input;
+            }
+          }
+          return null;
+        })() ||
         // Fallback: any contenteditable that's not in a reply structure
         (() => {
           const allInputs = post.querySelectorAll('div[contenteditable="true"]');
           for (const input of allInputs) {
             // Skip if it's in a reply structure
-            if (input.closest('[aria-label*="Responder"], [aria-label*="Reply"]')) continue;
-            if (input.closest('div[data-testid*="comment_replies"]')) continue;
+            const isInReply = input.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== input &&
+                             input.closest('div[data-testid*="comment_replies"]') !== null;
+            if (isInReply) continue;
+            
             // Check if it has a placeholder that suggests it's a main comment input
             const label = (input.getAttribute('aria-label') || 
                           input.getAttribute('aria-placeholder') || 
                           input.getAttribute('placeholder') || '').toLowerCase();
-            if (label.includes('escribe') || label.includes('write') || label.includes('comentario') || label.includes('comment')) {
-              return input;
+            if (label.includes('escribe') || label.includes('write') || label.includes('comentario') || label.includes('comment') || label.includes('responder como')) {
+              // Double-check it's not nested in a comment
+              const parentArticle = input.closest('div[role="article"]');
+              const postArticle = post.closest('div[role="article"]') || post;
+              const isNestedInComment = parentArticle && parentArticle !== postArticle && 
+                                       postArticle.contains(parentArticle);
+              if (!isNestedInComment) {
+                return input;
+              }
             }
           }
           return null;
@@ -4347,17 +4443,20 @@
       
       if (nearbyInput) {
         // Check if this input is a reply input (not main post input)
-        const isReplyInput = nearbyInput.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== null ||
-                            nearbyInput.closest('div[data-testid*="comment_replies"]') !== null ||
-                            nearbyInput.closest('div[data-testid*="comment_reply"]') !== null;
+        const isReplyInput = nearbyInput.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== nearbyInput &&
+                            (nearbyInput.closest('div[data-testid*="comment_replies"]') !== null ||
+                             nearbyInput.closest('div[data-testid*="comment_reply"]') !== null);
         
         const inputLabel = nearbyInput.getAttribute('aria-label') || 
                           nearbyInput.getAttribute('aria-placeholder') || '';
-        const isMainInput = inputLabel.toLowerCase().includes('escribe una respuesta') ||
+        // "Responder como..." can be main post input if it's NOT in a comment reply structure
+        const isMainInput = !isReplyInput && (
+                           inputLabel.toLowerCase().includes('escribe una respuesta') ||
                            inputLabel.toLowerCase().includes('escribe un comentario') ||
                            inputLabel.toLowerCase().includes('comentario público') ||
                            inputLabel.toLowerCase().includes('public comment') ||
-                           inputLabel.toLowerCase().includes('write a response');
+                           inputLabel.toLowerCase().includes('write a response') ||
+                           inputLabel.toLowerCase().includes('responder como'));
         
         if (isReplyInput || !isMainInput) {
           console.log('[Pajaritos] 🗑️ Removing button from comment reply input (not main post)');
