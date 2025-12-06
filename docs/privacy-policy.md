@@ -1,6 +1,6 @@
 # Política de Privacidad - Pajaritos de Guardia
 
-**Última actualización:** Diciembre 2024
+**Última actualización:** Enero 2025
 
 ## Información que Recopilamos
 

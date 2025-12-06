@@ -31,7 +31,7 @@
 </head>
 <body>
   <h1>Política de Privacidad - Voluntarios de Guardia</h1>
-  <p class="last-updated"><strong>Última actualización:</strong> Diciembre 2024</p>
+  <p class="last-updated"><strong>Última actualización:</strong> <span id="last-update"></span></p>
 
   <h2>Información que Recopilamos</h2>
   <p>Esta extensión de Chrome almacena localmente en tu navegador:</p>
@@ -67,6 +67,24 @@
 
   <h2>Contacto</h2>
   <p>Si tienes preguntas sobre esta política de privacidad, por favor contacta a través del repositorio de GitHub: <a href="https://github.com/nicomelnyk/pajaritos_contesta">https://github.com/nicomelnyk/pajaritos_contesta</a></p>
+  
+  <script>
+    // Dynamically set the last update date
+    function setLastUpdateDate() {
+      const lastUpdateSpan = document.getElementById('last-update');
+      if (lastUpdateSpan) {
+        const now = new Date();
+        const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+                       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        const month = months[now.getMonth()];
+        const year = now.getFullYear();
+        lastUpdateSpan.textContent = `${month} ${year}`;
+      }
+    }
+    
+    // Set date when page loads
+    setLastUpdateDate();
+  </script>
 </body>
 </html>
 
