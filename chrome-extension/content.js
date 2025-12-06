@@ -3216,9 +3216,17 @@
   let permalinkRetryCount = 0;
   const MAX_PERMALINK_RETRIES = 3;
   let permalinkRetryTimer = null;
+  let isAddingButtons = false; // Guard to prevent concurrent execution
 
   // Add buttons to all posts
   function addButtonsToPosts() {
+    // Prevent concurrent execution
+    if (isAddingButtons) {
+      console.log('[Pajaritos] ⏸️ addButtonsToPosts already running, skipping...');
+      return;
+    }
+    
+    isAddingButtons = true;
     try {
     // Check if we're on a permalink page (single post view)
     const isPermalinkPage = window.location.href.includes('/permalink/') || 
@@ -4488,6 +4496,8 @@
     }
     } catch (error) {
       console.error('[Pajaritos] Error in addButtonsToPosts:', error);
+    } finally {
+      isAddingButtons = false;
     }
   }
 
@@ -4504,9 +4514,27 @@
 
   // Observer for new posts - debounced to prevent performance issues
   const observer = new MutationObserver((mutations) => {
-    // Only process if there are actual relevant changes
+    // Skip if we're already adding buttons (prevents loop)
+    if (isAddingButtons) {
+      return;
+    }
+    
+    // Filter out mutations caused by our own button additions
     const hasRelevantChanges = mutations.some(mutation => {
-      return mutation.type === 'childList' && mutation.addedNodes.length > 0;
+      if (mutation.type !== 'childList' || mutation.addedNodes.length === 0) {
+        return false;
+      }
+      // Check if any added node is our button or contains our button
+      for (const node of mutation.addedNodes) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          // Skip if this mutation is from our button
+          if (node.classList?.contains('pajaritos-reply-btn') || 
+              node.querySelector?.('.pajaritos-reply-btn')) {
+            return false;
+          }
+        }
+      }
+      return true;
     });
     
     if (hasRelevantChanges) {
@@ -4533,7 +4561,10 @@
 
   // Periodic check - reduced frequency to prevent performance issues
   setInterval(() => {
-    addButtonsToPosts();
+    // Skip if already running (prevents loop)
+    if (!isAddingButtons) {
+      addButtonsToPosts();
+    }
   }, 5000); // Increased from 3000ms to 5000ms
 
   // Initial check after a delay
