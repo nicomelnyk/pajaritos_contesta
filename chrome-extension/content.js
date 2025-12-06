@@ -4200,6 +4200,7 @@
           }
           return null;
         })();
+      
       // Check if input is actually visible (not hidden)
       const hasMainInput = mainInputInPost !== null && mainInputInPost.offsetParent !== null;
       console.log(`[Pajaritos] 🔍 Post ${index + 1}: mainInputInPost=${mainInputInPost ? 'FOUND' : 'NOT FOUND'}, hasMainInput=${hasMainInput}`);
@@ -4347,14 +4348,15 @@
               console.log('[Pajaritos] ⚠️ Permalink page: Input not detected and no "Comentar" button, but this is the only post - showing button anyway (fallback)');
               shouldShowButton = true;
             } else {
-            // Multiple posts - this might be a background/suggested post
-            const existingBtn = post.querySelector('.pajaritos-reply-btn');
-            if (existingBtn) {
-              console.log('[Pajaritos] 🗑️ Removing button from background post (no main input)');
-              existingBtn.remove();
+              // Multiple posts - this might be a background/suggested post
+              const existingBtn = post.querySelector('.pajaritos-reply-btn');
+              if (existingBtn) {
+                console.log('[Pajaritos] 🗑️ Removing button from background post (no main input)');
+                existingBtn.remove();
+              }
+              console.log(`[Pajaritos] ⏭️ Skipping post ${index + 1} (no main input on permalink page)`);
+              return; // Skip posts without main input on permalink pages
             }
-            console.log(`[Pajaritos] ⏭️ Skipping post ${index + 1} (no main input on permalink page)`);
-            return; // Skip posts without main input on permalink pages
           }
         }
       }
