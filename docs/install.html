@@ -218,7 +218,7 @@
         <a href="voluntarios-de-guardia-v2.0.7.zip" class="download-btn" download>
           ⬇️ Descargar v2.0.7
         </a>
-        <p class="version-info">Versión 2.0.7 - Última actualización: Diciembre 2024</p>
+        <p class="version-info">Versión 2.0.7 - Última actualización: <span id="last-update"></span></p>
       </div>
       
       <div class="steps">
@@ -309,5 +309,23 @@
       </p>
     </div>
   </div>
+  
+  <script>
+    // Dynamically set the last update date
+    function setLastUpdateDate() {
+      const lastUpdateSpan = document.getElementById('last-update');
+      if (lastUpdateSpan) {
+        const now = new Date();
+        const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+                       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        const month = months[now.getMonth()];
+        const year = now.getFullYear();
+        lastUpdateSpan.textContent = `${month} ${year}`;
+      }
+    }
+    
+    // Set date when page loads
+    setLastUpdateDate();
+  </script>
 </body>
 </html>
