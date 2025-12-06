@@ -28,6 +28,34 @@
       }
     }
     
+    // EXPANDED SEARCH: Also check grandparents and siblings
+    // Facebook often has buttons in containers outside the article element
+    if (!searchRoot.querySelector('div[data-ad-rendering-role="comment_button"]') && 
+        !searchRoot.querySelector('div[role="button"][aria-label*="Comentar"]')) {
+      // Try going up more levels
+      let currentElement = postElement;
+      let levels = 0;
+      while (currentElement && levels < 5) {
+        const grandparent = currentElement.parentElement;
+        if (!grandparent) break;
+        
+        // Check if grandparent has action buttons (Like/Comment/Share area)
+        const hasActionButtons = grandparent.querySelector('div[role="group"]') ||
+                                grandparent.querySelector('div[role="toolbar"]') ||
+                                grandparent.textContent?.toLowerCase().includes('comentar') ||
+                                grandparent.textContent?.toLowerCase().includes('me gusta');
+        
+        if (hasActionButtons) {
+          searchRoot = grandparent;
+          console.log(`[Pajaritos] 🔍 Expanded search to grandparent level ${levels + 1} (found action buttons area)`);
+          break;
+        }
+        
+        currentElement = grandparent;
+        levels++;
+      }
+    }
+    
     // Try data-ad-rendering-role="comment_button" first (most reliable)
     const byDataRole = searchRoot.querySelector('div[data-ad-rendering-role="comment_button"]')?.closest('div[role="button"]');
     if (byDataRole) {
@@ -4210,12 +4238,19 @@
             shouldShowButton = true;
             canOpenInput = true;
             console.log(`[Pajaritos] ✅ Post ${index + 1}: Overriding shouldShowButton=true (found "Comentar" button on permalink)`);
-          } else if (postsToProcess.length === 1) {
-            // FALLBACK 2: If this is the only post on a permalink page, it's definitely the main post
-            // Some users have different Facebook UI where inputs aren't detected immediately
-            console.log('[Pajaritos] ⚠️ Permalink page: Input not detected and no "Comentar" button, but this is the only post - showing button anyway (fallback)');
-            shouldShowButton = true;
           } else {
+            // FALLBACK 2: Check if it's in a modal (permalink pages often open in modals)
+            const isInModal = post.closest('[role="dialog"]') !== null || 
+                             post.closest('[aria-modal="true"]') !== null;
+            if (isInModal && postsToProcess.length === 1) {
+              console.log('[Pajaritos] ⚠️ Permalink page: Input not detected and no "Comentar" button, but it\'s the only post in modal - showing button anyway (fallback)');
+              shouldShowButton = true;
+            } else if (postsToProcess.length === 1) {
+              // FALLBACK 3: If this is the only post on a permalink page, it's definitely the main post
+              // Some users have different Facebook UI where inputs aren't detected immediately
+              console.log('[Pajaritos] ⚠️ Permalink page: Input not detected and no "Comentar" button, but this is the only post - showing button anyway (fallback)');
+              shouldShowButton = true;
+            } else {
             // Multiple posts - this might be a background/suggested post
             const existingBtn = post.querySelector('.pajaritos-reply-btn');
             if (existingBtn) {
@@ -4242,9 +4277,27 @@
           shouldShowButton = true;
           console.log(`[Pajaritos] ✅ Post ${index + 1}: Overriding shouldShowButton=true (found "Comentar" button)`);
         } else {
-          console.log(`[Pajaritos] ⏭️ Skipping post ${index + 1} (comment input not visible and cannot be opened)`);
-          return; // Skip posts where comment section is not open and cannot be opened
+          // LAST RESORT: If it's a modal and only one post, show button anyway
+          // The post is definitely the main one in a modal
+          const isInModal = post.closest('[role="dialog"]') !== null || 
+                           post.closest('[aria-modal="true"]') !== null;
+          if (isInModal && postsToProcess.length === 1) {
+            console.log(`[Pajaritos] ⚠️ Post ${index + 1}: No input or "Comentar" button found, but it's the only post in modal - showing button anyway (last resort)`);
+            shouldShowButton = true;
+        } else {
+          // LAST RESORT: If it's a modal and only one post, show button anyway
+          // The post is definitely the main one in a modal
+          const isInModal = post.closest('[role="dialog"]') !== null || 
+                           post.closest('[aria-modal="true"]') !== null;
+          if (isInModal && postsToProcess.length === 1) {
+            console.log(`[Pajaritos] ⚠️ Post ${index + 1}: No input or "Comentar" button found, but it's the only post in modal - showing button anyway (last resort)`);
+            shouldShowButton = true;
+          } else {
+            console.log(`[Pajaritos] ⏭️ Skipping post ${index + 1} (comment input not visible and cannot be opened)`);
+            return; // Skip posts where comment section is not open and cannot be opened
+          }
         }
+      }
       }
       
       // Add button to this post
