@@ -4093,32 +4093,43 @@
         });
       }
       
-      // If input exists but is not visible, check if we can open it by clicking "Comentar"
+      // ALWAYS check for "Comentar" button, even if input is not found
+      // This is important because some Facebook UIs don't show the input until "Comentar" is clicked
+      console.log(`[Pajaritos] 🔍 Post ${index + 1}: Searching for "Comentar" button...`);
+      const commentButton = findCommentButton(post);
       let canOpenInput = false;
-      if (mainInputInPost && mainInputInPost.offsetParent === null) {
-        console.log(`[Pajaritos] 🔍 Post ${index + 1}: Input exists but is hidden, searching for "Comentar" button...`);
-        const commentButton = findCommentButton(post);
-        if (commentButton) {
-          canOpenInput = true;
-          const btnLabel = commentButton.getAttribute('aria-label') || commentButton.textContent?.substring(0, 30) || 'no label';
-          console.log(`[Pajaritos] ✅ Post ${index + 1}: Comment input exists but is hidden, "Comentar" button found - can open it (label: ${btnLabel})`);
-        } else {
-          console.log(`[Pajaritos] ⚠️ Post ${index + 1}: Comment input exists but is hidden, and "Comentar" button not found`);
-          // Log all buttons in post to help debug
-          const allButtons = post.querySelectorAll('button, [role="button"]');
-          console.log(`[Pajaritos] 🔍 Post ${index + 1}: Found ${allButtons.length} button(s) in post, checking for comment button...`);
-          allButtons.forEach((btn, btnIdx) => {
-            const btnText = btn.textContent?.toLowerCase() || '';
-            const btnAria = btn.getAttribute('aria-label')?.toLowerCase() || '';
-            if (btnText.includes('comentar') || btnText.includes('comment') || btnAria.includes('comentar') || btnAria.includes('comment')) {
-              console.log(`[Pajaritos] 🔍 Post ${index + 1}: Button ${btnIdx + 1} might be comment button:`, {
-                text: btn.textContent?.substring(0, 30),
-                ariaLabel: btn.getAttribute('aria-label')?.substring(0, 50),
-                className: btn.className?.substring(0, 50)
-              });
-            }
-          });
-        }
+      
+      if (commentButton) {
+        const btnLabel = commentButton.getAttribute('aria-label') || commentButton.textContent?.substring(0, 30) || 'no label';
+        const btnRect = commentButton.getBoundingClientRect();
+        const isVisible = btnRect.width > 0 && btnRect.height > 0;
+        console.log(`[Pajaritos] ✅ Post ${index + 1}: "Comentar" button found:`, {
+          label: btnLabel,
+          visible: isVisible,
+          position: `(${Math.round(btnRect.left)}, ${Math.round(btnRect.top)})`
+        });
+        canOpenInput = true; // We can click this to open the input
+      } else {
+        console.log(`[Pajaritos] ⚠️ Post ${index + 1}: "Comentar" button not found`);
+        // Log all buttons in post to help debug
+        const allButtons = post.querySelectorAll('button, [role="button"]');
+        console.log(`[Pajaritos] 🔍 Post ${index + 1}: Found ${allButtons.length} button(s) in post, checking for comment button...`);
+        allButtons.forEach((btn, btnIdx) => {
+          const btnText = btn.textContent?.toLowerCase() || '';
+          const btnAria = btn.getAttribute('aria-label')?.toLowerCase() || '';
+          if (btnText.includes('comentar') || btnText.includes('comment') || btnAria.includes('comentar') || btnAria.includes('comment')) {
+            console.log(`[Pajaritos] 🔍 Post ${index + 1}: Button ${btnIdx + 1} might be comment button:`, {
+              text: btn.textContent?.substring(0, 30),
+              ariaLabel: btn.getAttribute('aria-label')?.substring(0, 50),
+              className: btn.className?.substring(0, 50)
+            });
+          }
+        });
+      }
+      
+      // If input exists but is not visible, we already have canOpenInput from above
+      if (mainInputInPost && mainInputInPost.offsetParent === null && canOpenInput) {
+        console.log(`[Pajaritos] ℹ️ Post ${index + 1}: Comment input exists but is hidden, "Comentar" button found - can open it`);
       }
       
       // Also check if the post contains the main comment input we found earlier (if we found one)
@@ -4190,21 +4201,20 @@
       // On permalink pages, ONLY show button on posts with main input (the actual post being viewed)
       if (isPermalinkPage) {
         if (!shouldShowButton) {
-          // FALLBACK: If this is the only post on a permalink page, it's definitely the main post
-          // Some users have different Facebook UI where inputs aren't detected immediately
-          if (postsToProcess.length === 1) {
-            console.log('[Pajaritos] ⚠️ Permalink page: Input not detected, but this is the only post - showing button anyway (fallback)');
-            // Try to find "Comentar" button as additional confirmation
-            const commentButton = findCommentButton(post);
-            if (commentButton) {
-              console.log('[Pajaritos] ✅ Found "Comentar" button - confirming this is the main post');
-              // Override shouldShowButton for this case
-              shouldShowButton = true;
-            } else {
-              // Even without "Comentar" button, if it's the only post on permalink, it's the main one
-              console.log('[Pajaritos] ⚠️ No "Comentar" button found, but showing button anyway (only post on permalink)');
-              shouldShowButton = true;
-            }
+          // FALLBACK 1: Check for "Comentar" button even if input not detected
+          console.log(`[Pajaritos] 🔍 Post ${index + 1}: Permalink page, input not detected, checking for "Comentar" button...`);
+          const permalinkCommentButton = findCommentButton(post);
+          if (permalinkCommentButton) {
+            const btnLabel = permalinkCommentButton.getAttribute('aria-label') || permalinkCommentButton.textContent?.substring(0, 30) || 'no label';
+            console.log(`[Pajaritos] ✅ Post ${index + 1}: Found "Comentar" button on permalink - label: ${btnLabel}`);
+            shouldShowButton = true;
+            canOpenInput = true;
+            console.log(`[Pajaritos] ✅ Post ${index + 1}: Overriding shouldShowButton=true (found "Comentar" button on permalink)`);
+          } else if (postsToProcess.length === 1) {
+            // FALLBACK 2: If this is the only post on a permalink page, it's definitely the main post
+            // Some users have different Facebook UI where inputs aren't detected immediately
+            console.log('[Pajaritos] ⚠️ Permalink page: Input not detected and no "Comentar" button, but this is the only post - showing button anyway (fallback)');
+            shouldShowButton = true;
           } else {
             // Multiple posts - this might be a background/suggested post
             const existingBtn = post.querySelector('.pajaritos-reply-btn');
@@ -4220,8 +4230,21 @@
       
       // On feed pages, also check if input is visible or can be opened
       if (!isPermalinkPage && !hasMainInput && !canOpenInput) {
-        console.log(`[Pajaritos] ⏭️ Skipping post ${index + 1} (comment input not visible and cannot be opened)`);
-        return; // Skip posts where comment section is not open and cannot be opened
+        // FALLBACK: Even if input not found, check if "Comentar" button exists
+        // This handles cases where input is lazy-loaded or has different structure
+        console.log(`[Pajaritos] 🔍 Post ${index + 1}: Input not found, checking for "Comentar" button as fallback...`);
+        const fallbackCommentButton = findCommentButton(post);
+        if (fallbackCommentButton) {
+          const btnLabel = fallbackCommentButton.getAttribute('aria-label') || fallbackCommentButton.textContent?.substring(0, 30) || 'no label';
+          console.log(`[Pajaritos] ✅ Post ${index + 1}: Found "Comentar" button (fallback) - label: ${btnLabel}`);
+          // Override canOpenInput - we can click this button to open the input
+          canOpenInput = true;
+          shouldShowButton = true;
+          console.log(`[Pajaritos] ✅ Post ${index + 1}: Overriding shouldShowButton=true (found "Comentar" button)`);
+        } else {
+          console.log(`[Pajaritos] ⏭️ Skipping post ${index + 1} (comment input not visible and cannot be opened)`);
+          return; // Skip posts where comment section is not open and cannot be opened
+        }
       }
       
       // Add button to this post
