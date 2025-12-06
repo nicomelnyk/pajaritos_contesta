@@ -1,7 +1,7 @@
 // Background service worker for Chrome extension
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('Pajaritos de Guardia extension installed');
+  console.log('Voluntarios de Guardia extension installed');
   
   // Set default values
   chrome.storage.sync.set({

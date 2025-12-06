@@ -1,4 +1,4 @@
-# Política de Privacidad - Pajaritos de Guardia
+# Política de Privacidad - Voluntarios de Guardia
 
 **Última actualización:** [Fecha]
 

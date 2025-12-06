@@ -1,4 +1,4 @@
-// Pajaritos de Guardia - Manual Reply Content Script
+// Voluntarios de Guardia - Manual Reply Content Script
 // This script adds a button to each post for manual commenting
 
 (function() {
@@ -295,25 +295,43 @@
 
   // Post a comment on the main post
   async function postComment(commentText, postElement) {
+    // First, check if the comment input is already visible
+    let input = findCommentInput(postElement);
+    
+    // If input is not visible, we need to click the "Comentar" button first
+    if (!input || input.offsetParent === null) {
+      console.log('[Pajaritos] ⚠️ Comment input not visible, clicking "Comentar" button...');
+      
+      // Find the "Comentar" button for this post
+      const commentButton = findCommentButton(postElement);
+      
+      if (commentButton) {
+        console.log('[Pajaritos] ✅ Found "Comentar" button, clicking it...');
+        commentButton.click();
+        await wait(1000); // Wait for the input to appear after clicking
+      } else {
+        console.log('[Pajaritos] ⚠️ "Comentar" button not found, trying to find input anyway...');
+      }
+    }
+    
     // Wait for the input to appear (it might take a moment after clicking the comment button)
-    let input = null;
     let attempts = 0;
-    const maxAttempts = 10;
+    const maxAttempts = 15; // Increased attempts since we might have just clicked the button
     
     console.log('[Pajaritos] Waiting for comment input to appear...');
     while (!input && attempts < maxAttempts) {
       input = findCommentInput(postElement);
-      if (!input) {
+      if (!input || input.offsetParent === null) {
         console.log(`[Pajaritos] Input not found yet, attempt ${attempts + 1}/${maxAttempts}`);
         await wait(300);
         attempts++;
       } else {
-        console.log('[Pajaritos] ✅ Input found!');
+        console.log('[Pajaritos] ✅ Input found and visible!');
         break;
       }
     }
     
-    if (!input) {
+    if (!input || input.offsetParent === null) {
       console.log('[Pajaritos] ❌ Main post comment input not found after waiting');
       console.log('[Pajaritos] Post element:', postElement);
       console.log('[Pajaritos] Available inputs:', document.querySelectorAll('div[contenteditable="true"][role="textbox"]').length);
@@ -511,15 +529,197 @@
     }
   }
 
+  // Add button near comment input (new approach when post can't be found)
+  function addButtonNearCommentInput(commentInput) {
+    console.log('[Pajaritos] 🔘 addButtonNearCommentInput called for input:', commentInput);
+    
+    // Check if button already exists near this input
+    const existingBtn = commentInput.closest('[role="dialog"]')?.querySelector('.pajaritos-reply-btn') ||
+                       commentInput.parentElement?.querySelector('.pajaritos-reply-btn');
+    if (existingBtn) {
+      console.log('[Pajaritos] ⚠️ Button already exists near input, skipping');
+      return false;
+    }
+    
+    // Find a good place to insert the button - try multiple strategies
+    let insertTarget = null;
+    
+    // Strategy 1: Find the input's parent container (usually has other buttons/icons)
+    const inputContainer = commentInput.parentElement;
+    if (inputContainer) {
+      // Check if container has other buttons (like emoji, photo, etc.)
+      const hasOtherButtons = inputContainer.querySelectorAll('button, [role="button"]').length > 0;
+      if (hasOtherButtons) {
+        insertTarget = inputContainer;
+        console.log('[Pajaritos] ✅ Found input container with other buttons');
+      } else {
+        // Try parent's parent
+        const grandParent = inputContainer.parentElement;
+        if (grandParent) {
+          const hasButtons = grandParent.querySelectorAll('button, [role="button"]').length > 0;
+          if (hasButtons) {
+            insertTarget = grandParent;
+            console.log('[Pajaritos] ✅ Found grandparent container with buttons');
+          }
+        }
+      }
+    }
+    
+    // Strategy 2: Find sibling elements that might be a toolbar
+    if (!insertTarget) {
+      const inputParent = commentInput.parentElement;
+      if (inputParent) {
+        const siblings = Array.from(inputParent.children);
+        const toolbarSibling = siblings.find(sibling => {
+          const hasButtons = sibling.querySelectorAll('button, [role="button"]').length > 0;
+          return hasButtons && sibling !== commentInput;
+        });
+        if (toolbarSibling) {
+          insertTarget = toolbarSibling;
+          console.log('[Pajaritos] ✅ Found toolbar sibling');
+        }
+      }
+    }
+    
+    // Strategy 3: Insert before or after the input
+    if (!insertTarget) {
+      insertTarget = commentInput.parentElement;
+      console.log('[Pajaritos] ✅ Using input parent as fallback');
+    }
+    
+    if (!insertTarget) {
+      console.error('[Pajaritos] ❌ No insert target found for comment input');
+      return false;
+    }
+    
+    // Find the post element for the form (try to find it from the input)
+    // We'll search for it when the button is clicked, but for now try to find it
+    let postElementForForm = null;
+    
+    // Try to find the post by going up the DOM tree
+    let element = commentInput;
+    let levels = 0;
+    while (element && levels < 20) {
+      const article = element.closest('div[role="article"]');
+      if (article) {
+        postElementForForm = article;
+        console.log('[Pajaritos] ✅ Found post element for form via DOM traversal');
+        break;
+      }
+      element = element.parentElement;
+      levels++;
+    }
+    
+    // If still not found, use the modal or a container
+    if (!postElementForForm) {
+      postElementForForm = commentInput.closest('[role="dialog"]') || 
+                          commentInput.closest('div[data-testid*="modal"]') ||
+                          commentInput.closest('div[aria-modal="true"]') ||
+                          insertTarget;
+      console.log('[Pajaritos] ⚠️ Using modal/container as post element for form');
+    }
+    
+    // Create button
+    const replyBtn = document.createElement('div');
+    replyBtn.className = 'pajaritos-reply-btn';
+    replyBtn.innerHTML = '🐦';
+    replyBtn.style.cssText = `
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 12px;
+      margin-left: 8px;
+      background: #1877f2;
+      color: white;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: background 0.2s;
+      z-index: 10000;
+    `;
+    
+    replyBtn.addEventListener('mouseenter', () => {
+      replyBtn.style.background = '#166fe5';
+    });
+    
+    replyBtn.addEventListener('mouseleave', () => {
+      replyBtn.style.background = '#1877f2';
+    });
+    
+    // Add click handler
+    replyBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      
+      // Find the post element when clicked (in case DOM changed)
+      let postElement = postElementForForm;
+      if (!postElement || !postElement.closest('[role="dialog"]')) {
+        // Try to find it again
+        let element = commentInput;
+        let levels = 0;
+        while (element && levels < 20) {
+          const article = element.closest('div[role="article"]');
+          if (article) {
+            postElement = article;
+            break;
+          }
+          element = element.parentElement;
+          levels++;
+        }
+        
+        if (!postElement) {
+          postElement = commentInput.closest('[role="dialog"]') || insertTarget;
+        }
+      }
+      
+      console.log('[Pajaritos] 🔘 Button clicked, showing form with post element:', postElement);
+      // Show form modal
+      showReplyForm(postElement, replyBtn);
+    });
+    
+    // Insert button
+    try {
+      // Try to insert after the input or in the container
+      if (insertTarget === commentInput.parentElement) {
+        // Insert as sibling after input
+        commentInput.insertAdjacentElement('afterend', replyBtn);
+        console.log('[Pajaritos] ✅ Button inserted after comment input');
+      } else {
+        // Insert in container
+        insertTarget.appendChild(replyBtn);
+        console.log('[Pajaritos] ✅ Button inserted in container');
+      }
+      
+      // Verify button is in DOM
+      setTimeout(() => {
+        const btnInDom = document.querySelector('.pajaritos-reply-btn');
+        if (btnInDom) {
+          console.log('[Pajaritos] ✅ Button verified in DOM');
+        } else {
+          console.error('[Pajaritos] ❌ Button NOT found in DOM after insertion!');
+        }
+      }, 100);
+      
+      return true;
+    } catch (e) {
+      console.error('[Pajaritos] ❌ Error inserting button near input:', e);
+      return false;
+    }
+  }
+
   // Create reply button for a post
   function createReplyButton(postElement) {
+    console.log('[Pajaritos] 🔘 createReplyButton called for post:', postElement);
+    
     // Check if button already exists
     if (postElement.querySelector('.pajaritos-reply-btn')) {
+      console.log('[Pajaritos] ⚠️ Button already exists, skipping');
       return false;
     }
 
     // Find where to insert the button (near comment button or action buttons)
     const commentButton = findCommentButton(postElement);
+    console.log('[Pajaritos] 🔍 Comment button found:', commentButton ? 'YES' : 'NO');
     
       // If no comment button found, try to find the action buttons area
       let insertTarget = commentButton;
@@ -592,11 +792,14 @@
                 insertTarget = postElement;
               }
             } else {
+              console.log('[Pajaritos] ❌ No insert target found, cannot create button');
               return false;
             }
           }
         }
       }
+
+    console.log('[Pajaritos] 📍 Insert target:', insertTarget ? 'FOUND' : 'NOT FOUND', insertTarget?.tagName, insertTarget?.className);
 
     // Create button
     const replyBtn = document.createElement('div');
@@ -639,19 +842,35 @@
       const parent = commentButton.parentElement;
       if (parent) {
         parent.appendChild(replyBtn);
+        console.log('[Pajaritos] ✅ Button inserted next to comment button (via parent)');
         return true;
       } else {
         commentButton.insertAdjacentElement('afterend', replyBtn);
+        console.log('[Pajaritos] ✅ Button inserted after comment button');
         return true;
       }
-    } else {
+    } else if (insertTarget) {
       // Insert in action container
       try {
         insertTarget.appendChild(replyBtn);
+        console.log('[Pajaritos] ✅ Button inserted in action container');
+        // Verify button is actually in DOM
+        setTimeout(() => {
+          const btnInDom = document.querySelector('.pajaritos-reply-btn');
+          if (btnInDom) {
+            console.log('[Pajaritos] ✅ Button verified in DOM');
+          } else {
+            console.error('[Pajaritos] ❌ Button NOT found in DOM after insertion!');
+          }
+        }, 100);
         return true;
       } catch (e) {
+        console.error('[Pajaritos] ❌ Error inserting button:', e);
         return false;
       }
+    } else {
+      console.error('[Pajaritos] ❌ No insert target available');
+      return false;
     }
   }
 
@@ -699,11 +918,43 @@
       position: relative;
     `;
 
-    // Build option select dropdown
+    // Build option select dropdown - includes ALL registered config options
     let optionsHtml = '<option value="">Selecciona una opción...</option>';
-    for (const [key, option] of Object.entries(replyOptions)) {
+    
+    // Verify REPLY_OPTIONS is available
+    if (typeof REPLY_OPTIONS === 'undefined') {
+      console.error('[Pajaritos] ❌ REPLY_OPTIONS is undefined! Config files may not have loaded.');
+    }
+    
+    // Get all options and sort them alphabetically by name for better UX
+    const allOptions = Object.entries(replyOptions);
+    console.log('[Pajaritos] 🔍 Raw options before sorting:', allOptions.length, 'options');
+    console.log('[Pajaritos] 🔍 Option keys:', Object.keys(replyOptions).join(', '));
+    
+    // Sort alphabetically by name (case-insensitive)
+    const sortedOptions = allOptions.sort((a, b) => {
+      const nameA = (a[1]?.name || '').trim().toLowerCase();
+      const nameB = (b[1]?.name || '').trim().toLowerCase();
+      if (!nameA || !nameB) {
+        console.warn('[Pajaritos] ⚠️ Missing name in option:', a[0], 'or', b[0]);
+      }
+      return nameA.localeCompare(nameB, 'es', { sensitivity: 'base', numeric: true });
+    });
+    
+    // Include all registered options in the select
+    for (const [key, option] of sortedOptions) {
+      if (!option || !option.name) {
+        console.warn('[Pajaritos] ⚠️ Skipping invalid option:', key);
+        continue;
+      }
       optionsHtml += `<option value="${key}">${option.name}</option>`;
     }
+    
+    // Log all available options for debugging (sorted list)
+    const sortedNames = sortedOptions.map(([key, opt]) => `${key}: "${opt?.name || 'NO NAME'}"`).join(', ');
+    console.log('[Pajaritos] 📋 Total options loaded:', Object.keys(replyOptions).length);
+    console.log('[Pajaritos] 📋 Sorted options (first 10):', sortedNames.substring(0, 200));
+    console.log('[Pajaritos] 📋 Has gorrion?', 'gorrion' in replyOptions, replyOptions.gorrion ? `name: "${replyOptions.gorrion.name}"` : 'NOT FOUND');
 
     form.innerHTML = `
       <button id="pajaritos-close-x-btn" style="
@@ -726,7 +977,7 @@
         transition: background-color 0.2s;
       " onmouseover="this.style.backgroundColor='#e4e6eb'" onmouseout="this.style.backgroundColor='#f0f2f5'" title="Cerrar">×</button>
       
-      <h2 style="margin: 0 0 20px 0; color: #1877f2; font-size: 20px;">🐦 Pajaritos de Guardia</h2>
+      <h2 style="margin: 0 0 20px 0; color: #1877f2; font-size: 20px;">🐦 Voluntarios de Guardia</h2>
       
       <div style="margin-bottom: 20px;">
         <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #333;">Seleccionar opción:</label>
@@ -797,6 +1048,43 @@
     document.body.appendChild(overlay);
 
     const optionSelect = form.querySelector('#pajaritos-option-select');
+    
+    // Verify and ensure options are sorted correctly after DOM creation
+    // This is a safety check in case the HTML wasn't properly sorted
+    if (optionSelect) {
+      const options = Array.from(optionSelect.options);
+      const sortedOptions = options.slice(1).sort((a, b) => {
+        const nameA = (a.textContent || '').trim().toLowerCase();
+        const nameB = (b.textContent || '').trim().toLowerCase();
+        return nameA.localeCompare(nameB, 'es', { sensitivity: 'base', numeric: true });
+      });
+      
+      // Only reorder if needed
+      let needsReorder = false;
+      for (let i = 1; i < options.length; i++) {
+        if (options[i].textContent !== sortedOptions[i - 1].textContent) {
+          needsReorder = true;
+          break;
+        }
+      }
+      
+      if (needsReorder) {
+        console.log('[Pajaritos] 🔄 Reordering select options...');
+        const firstOption = options[0]; // Keep the "Selecciona una opción..." option
+        optionSelect.innerHTML = '';
+        optionSelect.appendChild(firstOption);
+        sortedOptions.forEach(opt => optionSelect.appendChild(opt));
+      }
+      
+      // Verify gorrion is present
+      const gorrionOption = Array.from(optionSelect.options).find(opt => opt.value === 'gorrion');
+      if (!gorrionOption) {
+        console.error('[Pajaritos] ❌ Gorrion option is MISSING from select!');
+        console.log('[Pajaritos] Available values:', Array.from(optionSelect.options).map(o => o.value).join(', '));
+      } else {
+        console.log('[Pajaritos] ✅ Gorrion option found:', gorrionOption.textContent);
+      }
+    }
     const subtypeContainer = form.querySelector('#pajaritos-subtype-container');
     const subtypeSelect = form.querySelector('#pajaritos-subtype-select');
     const repliesContainer = form.querySelector('#pajaritos-replies-container');
@@ -809,6 +1097,7 @@
 
     // Helper function to get the current storage key (optionKey or optionKey_subtypeKey)
     function getStorageKey() {
+      if (!optionSelect) return null;
       const optionKey = optionSelect.value;
       if (!optionKey) return null;
       
@@ -1688,16 +1977,57 @@
       // Function to download image
       async function downloadImage(imageUrl, commentId) {
         try {
+          if (!imageUrl) {
+            console.warn('[Pajaritos] ⚠️ No image URL provided for download');
+            return;
+          }
+          
           let blob;
           
           // If it's a base64 image (custom image)
           if (imageUrl.startsWith('data:image')) {
             const response = await fetch(imageUrl);
+            if (!response.ok) throw new Error('Failed to fetch base64 image');
             blob = await response.blob();
+          } else if (imageUrl.startsWith('chrome-extension://')) {
+            // Extension URL - try to fetch it
+            try {
+              const response = await fetch(imageUrl);
+              if (!response.ok) throw new Error('Failed to fetch extension image');
+              blob = await response.blob();
+            } catch (fetchError) {
+              // If fetch fails, try using the URL directly (browser will handle it)
+              console.warn('[Pajaritos] ⚠️ Could not fetch extension image, using direct URL');
+              const a = document.createElement('a');
+              a.href = imageUrl;
+              a.download = commentId ? `imagen_${commentId}_${Date.now()}.png` : `imagen_${Date.now()}.png`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              return; // Exit early since we used direct download
+            }
           } else {
-            // If it's a URL (extension image or external)
-            const response = await fetch(imageUrl);
-            blob = await response.blob();
+            // External URL or relative path
+            try {
+              // Try to convert relative path to extension URL
+              const extensionUrl = imageUrl.startsWith('/') || !imageUrl.includes('://') 
+                ? chrome.runtime.getURL(imageUrl.startsWith('/') ? imageUrl.substring(1) : imageUrl)
+                : imageUrl;
+              const response = await fetch(extensionUrl);
+              if (!response.ok) throw new Error('Failed to fetch image');
+              blob = await response.blob();
+            } catch (fetchError) {
+              console.warn('[Pajaritos] ⚠️ Could not fetch image:', fetchError.message);
+              // For external URLs, try direct download
+              const a = document.createElement('a');
+              a.href = imageUrl;
+              a.download = commentId ? `imagen_${commentId}_${Date.now()}.png` : `imagen_${Date.now()}.png`;
+              a.target = '_blank';
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              return; // Exit early
+            }
           }
           
           // Create download link
@@ -1715,7 +2045,10 @@
           window.URL.revokeObjectURL(url);
         } catch (error) {
           console.error('[Pajaritos] Error downloading image:', error);
-          alert('Error al descargar la imagen. Por favor, intenta nuevamente.');
+          // Don't show alert for fetch errors (they're expected for some images)
+          if (!error.message?.includes('Failed to fetch')) {
+            alert('Error al descargar la imagen. Por favor, intenta nuevamente.');
+          }
         }
       }
 
@@ -2063,18 +2396,12 @@
 
     try {
       // Focus the input to open the comment box
-      // Only click if we need to upload an image (to ensure buttons are visible)
+      // NEVER click the input - it triggers file dialog
       if (progressCallback) progressCallback('Abriendo campo de comentario...');
       input.focus();
+      await wait(500); // Wait for comment box to open
       
-      // Only click if we need to upload an image (clicking might trigger image selector)
-      if (imagePath) {
-        input.click();
-        await wait(500);
-      } else {
-        // For text-only comments, just focus (don't click to avoid opening image selector)
-        await wait(300);
-      }
+      // Don't click the input - just focus it to avoid triggering file dialog
 
       // If there's an image, upload it first
       // Double-check that imagePath is not null, undefined, or empty string
@@ -2258,52 +2585,64 @@
         return false;
       }
 
-      // Find the "adjunta una foto o un video" button
-      // Wait a bit for buttons to appear after focusing
-      await wait(500);
-      const photoButtons = inputContainer.querySelectorAll('div[role="button"], span[role="button"], button');
-      let photoButton = null;
-      
-      for (const btn of photoButtons) {
-        if (btn.offsetParent === null) continue; // Skip hidden buttons
-        
-        const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
-        // Be more specific - only match the exact photo upload button
-        if ((ariaLabel.includes('adjunta una foto') || ariaLabel.includes('adjunta una foto o un video')) && 
-            !ariaLabel.includes('gif') && !ariaLabel.includes('sticker') && !ariaLabel.includes('emoji')) {
-          photoButton = btn;
-          console.log('[Pajaritos] 📷 Found photo button:', ariaLabel);
-          break;
-        }
-      }
-
-      if (!photoButton) {
-        console.log('[Pajaritos] ❌ Photo button not found');
-        if (progressCallback) progressCallback('❌ Error: No se encontró el botón de imagen');
-        return false;
-      }
-
-      // Click the photo button
-      if (progressCallback) progressCallback('Abriendo selector de archivos...');
-      photoButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      await wait(200);
-      photoButton.click();
-      await wait(1000);
-
-      // Find the file input (it should appear after clicking)
+      // First, try to find an existing hidden file input (Facebook sometimes has them pre-created)
+      // This avoids opening the file dialog unnecessarily
       if (progressCallback) progressCallback('Buscando campo de archivo...');
-      let fileInput = null;
-      let attempts = 0;
-      while (!fileInput && attempts < 10) {
-        // Look for file input in the document
-        fileInput = inputContainer.querySelector('input[type="file"]') ||
-                   document.querySelector('input[type="file"][accept*="image"]') ||
-                   document.querySelector('input[type="file"][accept*="video"]');
+      let fileInput = inputContainer.querySelector('input[type="file"]') ||
+                     document.querySelector('input[type="file"][accept*="image"]') ||
+                     document.querySelector('input[type="file"][accept*="video"]');
+      
+      // If no file input exists, we need to click the photo button (this will open file dialog)
+      // This is unavoidable when Facebook doesn't have a pre-existing file input
+      if (!fileInput) {
+        console.log('[Pajaritos] ⚠️ No file input found, need to click photo button (this will open file dialog)');
         
-        if (!fileInput) {
-          await wait(300);
-          attempts++;
+        // Find the "adjunta una foto o un video" button
+        // Wait a bit for buttons to appear after focusing
+        await wait(500);
+        const photoButtons = inputContainer.querySelectorAll('div[role="button"], span[role="button"], button');
+        let photoButton = null;
+        
+        for (const btn of photoButtons) {
+          if (btn.offsetParent === null) continue; // Skip hidden buttons
+          
+          const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
+          // Be more specific - only match the exact photo upload button
+          if ((ariaLabel.includes('adjunta una foto') || ariaLabel.includes('adjunta una foto o un video')) && 
+              !ariaLabel.includes('gif') && !ariaLabel.includes('sticker') && !ariaLabel.includes('emoji')) {
+            photoButton = btn;
+            console.log('[Pajaritos] 📷 Found photo button:', ariaLabel);
+            break;
+          }
         }
+
+        if (!photoButton) {
+          console.log('[Pajaritos] ❌ Photo button not found');
+          if (progressCallback) progressCallback('❌ Error: No se encontró el botón de imagen');
+          return false;
+        }
+
+        // Click the photo button - this WILL open the file dialog
+        if (progressCallback) progressCallback('Abriendo selector de archivos...');
+        photoButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        await wait(200);
+        photoButton.click();
+        await wait(1000);
+
+        // Now look for the file input that appeared after clicking
+        let attempts = 0;
+        while (!fileInput && attempts < 10) {
+          fileInput = inputContainer.querySelector('input[type="file"]') ||
+                     document.querySelector('input[type="file"][accept*="image"]') ||
+                     document.querySelector('input[type="file"][accept*="video"]');
+          
+          if (!fileInput) {
+            await wait(300);
+            attempts++;
+          }
+        }
+      } else {
+        console.log('[Pajaritos] ✅ Found existing file input, skipping photo button click (no dialog will open)');
       }
 
       if (!fileInput) {
@@ -2353,6 +2692,10 @@
       return true;
     } catch (error) {
       console.error('[Pajaritos] Error uploading image:', error);
+      // Don't log fetch errors as critical (they might be expected in some cases)
+      if (error.message?.includes('Failed to fetch')) {
+        console.warn('[Pajaritos] ⚠️ Fetch error (this may be expected for some image sources)');
+      }
       return false;
     }
   }
@@ -2372,6 +2715,16 @@
     
     if (hasReplyInput) {
       return false;
+    }
+    
+    // STRICT: Check if it's inside a comment structure - reject it
+    const inCommentStructure = element.closest('[data-testid*="comment"]') !== null;
+    if (inCommentStructure) {
+      // But allow if it has main post input (the main post itself might be in a comment structure on permalink pages)
+      const hasMainInput = element.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') !== null;
+      if (!hasMainInput) {
+        return false; // It's a comment, not the main post
+      }
     }
     
     // If it has post attributes and no reply input, it's likely a main post
@@ -2513,80 +2866,1122 @@
     return true;
   }
 
+  // Helper function to extract post metadata for logging
+  function getPostMetadata(postElement) {
+    const metadata = {
+      textPreview: '',
+      author: '',
+      isVisible: false,
+      inModal: false,
+      hasMainInput: false,
+      hasVideo: false,
+      boundingRect: null
+    };
+    
+    try {
+      // Get text preview (first 150 characters)
+      const allText = postElement.textContent || '';
+      metadata.textPreview = allText.substring(0, 150).replace(/\s+/g, ' ').trim();
+      
+      // Try to find author name
+      const authorSelectors = [
+        'a[role="link"][href*="/user/"]',
+        'a[role="link"][href*="/profile.php"]',
+        'span[dir="auto"] a[role="link"]',
+        'h3 a[role="link"]',
+        '[data-testid*="post_author"]',
+        'strong a[role="link"]'
+      ];
+      
+      for (const selector of authorSelectors) {
+        const authorElement = postElement.querySelector(selector);
+        if (authorElement) {
+          metadata.author = authorElement.textContent?.trim() || '';
+          if (metadata.author) break;
+        }
+      }
+      
+      // Check visibility
+      const rect = postElement.getBoundingClientRect();
+      metadata.boundingRect = {
+        top: Math.round(rect.top),
+        left: Math.round(rect.left),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height)
+      };
+      metadata.isVisible = rect.width > 0 && rect.height > 0 && 
+                          window.getComputedStyle(postElement).display !== 'none' &&
+                          window.getComputedStyle(postElement).visibility !== 'hidden';
+      
+      // Check if in modal
+      metadata.inModal = postElement.closest('[role="dialog"]') !== null ||
+                        postElement.closest('[aria-modal="true"]') !== null ||
+                        postElement.closest('[data-testid*="modal"]') !== null;
+      
+      // Check for main input
+      metadata.hasMainInput = postElement.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') !== null ||
+                             postElement.querySelector('div[contenteditable="true"][aria-placeholder*="comentario público"]') !== null;
+      
+      // Check for video
+      metadata.hasVideo = postElement.querySelector('video') !== null;
+    } catch (error) {
+      console.error('[Pajaritos] Error extracting post metadata:', error);
+    }
+    
+    return metadata;
+  }
+  
+  // Helper function to log post metadata
+  function logPostMetadata(postElement, label = 'Post') {
+    const meta = getPostMetadata(postElement);
+    console.log(`[Pajaritos] 📋 ${label} metadata:`, {
+      author: meta.author || '(no author found)',
+      textPreview: meta.textPreview || '(no text)',
+      isVisible: meta.isVisible,
+      inModal: meta.inModal,
+      hasMainInput: meta.hasMainInput,
+      hasVideo: meta.hasVideo,
+      position: `(${meta.boundingRect?.left}, ${meta.boundingRect?.top})`,
+      size: `${meta.boundingRect?.width}x${meta.boundingRect?.height}`
+    });
+  }
+
   // Add buttons to all posts
   function addButtonsToPosts() {
-    const postSelectors = [
-      'div[data-ad-preview="message"]',  // Try this first - most reliable for group posts
-      'div[data-ad-comet-preview="message"]',
-      'div[data-pagelet*="FeedUnit"]',
-      'div[role="article"]',
-      'div[data-testid*="post"]'
-    ];
-
+    try {
+    // Check if we're on a permalink page (single post view)
+    const isPermalinkPage = window.location.href.includes('/permalink/') || 
+                           window.location.href.includes('/posts/');
+    
     let posts = [];
-    for (const selector of postSelectors) {
-      const found = document.querySelectorAll(selector);
-      if (found.length > 0) {
-        // Filter to only main posts, not comments
-        const filtered = Array.from(found).filter(post => isMainPost(post));
-        if (filtered.length > 0) {
-          posts = filtered;
-          break;
+    let mainCommentInput = null; // Declare at function scope so it's accessible throughout
+    
+    // FIRST: Check if there's a modal/dialog open - if so, ONLY search within it
+    const openModal = document.querySelector('[role="dialog"]:not([aria-hidden="true"])') ||
+                     document.querySelector('[data-testid*="modal"]:not([aria-hidden="true"])') ||
+                     document.querySelector('[aria-modal="true"]:not([aria-hidden="true"])') ||
+                     document.querySelector('div[aria-label*="Publicación"]:not([aria-hidden="true"])');
+    
+    let searchScope = document;
+    if (openModal) {
+      console.log('[Pajaritos] 🎯 MODAL DETECTED - Only searching within modal, ignoring background posts');
+      searchScope = openModal;
+    } else {
+      console.log('[Pajaritos] ℹ️ No modal detected, searching entire page');
+    }
+    
+    // On permalink pages OR when a modal is detected, use a more targeted approach
+    // (Modals often contain single posts, similar to permalink pages)
+    if (isPermalinkPage || openModal) {
+      console.log('[Pajaritos] 🔍 Permalink page - using targeted detection...');
+      
+      // First, try to find the main post by looking for the main comment input
+      // BUT: Only search within the modal if one exists
+      // Try multiple selectors - Facebook uses different labels in modals vs feed
+      
+      // DEBUG: Log ALL contenteditable divs in the modal to understand the structure
+      // Also check the entire document if modal search finds nothing
+      if (openModal) {
+        console.log('[Pajaritos] 🔍 DEBUG: Searching for ALL contenteditable divs in modal...');
+        let allContentEditables = searchScope.querySelectorAll('div[contenteditable="true"]');
+        console.log('[Pajaritos] 🔍 DEBUG: Found', allContentEditables.length, 'contenteditable div(s) in modal');
+        
+        // If nothing found in modal, also check entire document (maybe modal detection is wrong)
+        if (allContentEditables.length === 0) {
+          console.log('[Pajaritos] ⚠️ DEBUG: No contenteditable divs in modal, checking entire document...');
+          allContentEditables = document.querySelectorAll('div[contenteditable="true"]');
+          console.log('[Pajaritos] 🔍 DEBUG: Found', allContentEditables.length, 'contenteditable div(s) in entire document');
+          
+          // If we find them in document but not in modal, maybe we need to expand searchScope
+          if (allContentEditables.length > 0) {
+            console.log('[Pajaritos] ⚠️ DEBUG: Contenteditable divs found in document but not in modal - expanding search scope');
+            // Try to find which modal/dialog contains these inputs
+            for (const input of allContentEditables) {
+              const inputModal = input.closest('[role="dialog"]') ||
+                               input.closest('[data-testid*="modal"]') ||
+                               input.closest('[aria-modal="true"]');
+              if (inputModal && inputModal !== openModal) {
+                console.log('[Pajaritos] 🔍 DEBUG: Found different modal containing input, updating searchScope');
+                searchScope = inputModal;
+                break;
+              }
+            }
+          }
+        }
+        
+        allContentEditables.forEach((input, idx) => {
+          const ariaLabel = input.getAttribute('aria-label') || '';
+          const ariaPlaceholder = input.getAttribute('aria-placeholder') || '';
+          const placeholder = input.getAttribute('placeholder') || '';
+          const dataTestId = input.getAttribute('data-testid') || '';
+          const role = input.getAttribute('role') || '';
+          const className = input.className?.substring(0, 100) || '';
+          
+          // Check if it's in a reply structure
+          const inReply = input.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== null;
+          const inCommentReplies = input.closest('div[data-testid*="comment_replies"]') !== null;
+          
+          // Get parent info
+          const parent = input.parentElement;
+          const parentTag = parent?.tagName || '';
+          const parentRole = parent?.getAttribute('role') || '';
+          const parentClass = parent?.className?.substring(0, 50) || '';
+          
+          // Get position info
+          const rect = input.getBoundingClientRect();
+          const isVisible = rect.width > 0 && rect.height > 0;
+          
+          console.log(`[Pajaritos] 🔍 DEBUG: Input ${idx + 1}:`, {
+            ariaLabel: ariaLabel.substring(0, 50) || '(empty)',
+            ariaPlaceholder: ariaPlaceholder.substring(0, 50) || '(empty)',
+            placeholder: placeholder.substring(0, 50) || '(empty)',
+            dataTestId: dataTestId || '(empty)',
+            role: role || '(empty)',
+            className: className || '(empty)',
+            inReply: inReply,
+            inCommentReplies: inCommentReplies,
+            isVisible: isVisible,
+            position: `(${Math.round(rect.left)}, ${Math.round(rect.top)})`,
+            parent: `${parentTag}.${parentRole}`,
+            parentClass: parentClass || '(empty)'
+          });
+        });
+      }
+      
+      // Try to find comment input - first in searchScope, then in entire document if needed
+      mainCommentInput = searchScope.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') ||
+                         searchScope.querySelector('div[contenteditable="true"][aria-placeholder*="comentario público"]') ||
+                         searchScope.querySelector('div[contenteditable="true"][aria-label*="public comment"]') ||
+                         searchScope.querySelector('div[contenteditable="true"][aria-label*="Escribe una respuesta"]') ||
+                         searchScope.querySelector('div[contenteditable="true"][aria-label*="Write a response"]') ||
+                         searchScope.querySelector('div[contenteditable="true"][aria-label*="Escribe un comentario"]') ||
+                         searchScope.querySelector('div[contenteditable="true"][aria-label*="Write a comment"]') ||
+                         searchScope.querySelector('div[contenteditable="true"][placeholder*="Escribe"]') ||
+                         searchScope.querySelector('div[contenteditable="true"][data-testid*="comment"]');
+      
+      // If not found in searchScope and we have a modal, try entire document
+      if (!mainCommentInput && openModal) {
+        console.log('[Pajaritos] 🔍 DEBUG: Input not found in modal scope, trying entire document...');
+        mainCommentInput = document.querySelector('div[contenteditable="true"][aria-label*="Escribe una respuesta"]') ||
+                          document.querySelector('div[contenteditable="true"][aria-label*="Escribe un comentario"]') ||
+                          document.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') ||
+                          document.querySelector('div[contenteditable="true"][aria-placeholder*="comentario público"]');
+      }
+      
+      // Last resort: any contenteditable div that's likely a comment input (not in a comment reply)
+      if (!mainCommentInput) {
+        const searchArea = openModal ? document : searchScope; // Search entire document if modal detected
+        const allInputs = searchArea.querySelectorAll('div[contenteditable="true"]');
+        console.log('[Pajaritos] 🔍 DEBUG: Fallback search - checking', allInputs.length, 'contenteditable div(s)');
+        for (const input of allInputs) {
+          // Skip if it's inside a comment reply structure
+          if (input.closest('[aria-label*="Responder"], [aria-label*="Reply"]')) continue;
+          // Skip if it has a very specific comment reply indicator
+          if (input.closest('div[data-testid*="comment_replies"]')) continue;
+          // If it's in the modal and not in a reply, it's likely the main input
+          const placeholder = input.getAttribute('aria-label') || input.getAttribute('aria-placeholder') || input.getAttribute('placeholder') || '';
+          if (placeholder.toLowerCase().includes('escribe') || placeholder.toLowerCase().includes('write')) {
+            mainCommentInput = input;
+            console.log('[Pajaritos] ✅ Found input via fallback search:', placeholder.substring(0, 50));
+            break;
+          }
+        }
+      }
+      
+      console.log('[Pajaritos] 🔍 Main comment input found:', mainCommentInput ? 'YES' : 'NO', openModal ? '(in modal)' : '');
+      if (mainCommentInput) {
+        const inputLabel = mainCommentInput.getAttribute('aria-label') || mainCommentInput.getAttribute('aria-placeholder') || mainCommentInput.getAttribute('placeholder') || 'no label';
+        console.log('[Pajaritos] 🔍 Comment input label:', inputLabel.substring(0, 50));
+      } else if (openModal) {
+        console.log('[Pajaritos] ⚠️ DEBUG: Comment input NOT found with standard selectors. Check the DEBUG logs above to see all contenteditable divs.');
+      }
+      
+      if (mainCommentInput) {
+        // Find the post container that contains this input - try multiple levels up
+        let mainPost = mainCommentInput.closest('div[role="article"]');
+        
+        if (!mainPost) {
+          mainPost = mainCommentInput.closest('div[data-ad-preview="message"]');
+        }
+        if (!mainPost) {
+          mainPost = mainCommentInput.closest('div[data-ad-comet-preview="message"]');
+        }
+        if (!mainPost) {
+          mainPost = mainCommentInput.closest('div[data-pagelet*="FeedUnit"]');
+        }
+        if (!mainPost) {
+          // Try going up multiple levels
+          let parent = mainCommentInput.parentElement;
+          let levels = 0;
+          while (parent && levels < 10) {
+            if (parent.getAttribute('role') === 'article' || 
+                parent.getAttribute('data-ad-preview') === 'message' ||
+                parent.getAttribute('data-ad-comet-preview') === 'message' ||
+                parent.getAttribute('data-pagelet')?.includes('FeedUnit')) {
+              mainPost = parent;
+              break;
+            }
+            parent = parent.parentElement;
+            levels++;
+          }
+        }
+        
+        if (mainPost) {
+          console.log('[Pajaritos] 🔍 Found post container via comment input:', mainPost.tagName, mainPost.className?.substring(0, 50));
+          logPostMetadata(mainPost, 'Post found via comment input');
+          if (isMainPost(mainPost)) {
+            console.log('[Pajaritos] ✅ Found main post via comment input');
+            posts = [mainPost];
+          } else {
+            console.log('[Pajaritos] ⚠️ Post container found but isMainPost() returned false');
+          }
+        } else {
+          console.log('[Pajaritos] ⚠️ Could not find post container for comment input');
+          
+          // NEW APPROACH: Add button directly near the comment input
+          // Only if this is the main post input (not a comment reply input)
+          const inputLabel = mainCommentInput.getAttribute('aria-label') || 
+                            mainCommentInput.getAttribute('aria-placeholder') || 
+                            mainCommentInput.getAttribute('placeholder') || '';
+          const isMainInput = inputLabel.toLowerCase().includes('escribe una respuesta') ||
+                             inputLabel.toLowerCase().includes('escribe un comentario') ||
+                             inputLabel.toLowerCase().includes('comentario público') ||
+                             inputLabel.toLowerCase().includes('public comment') ||
+                             inputLabel.toLowerCase().includes('write a response');
+          
+          if (isMainInput) {
+            console.log('[Pajaritos] 🎯 Trying new approach: Adding button near main comment input...');
+            const buttonAdded = addButtonNearCommentInput(mainCommentInput);
+            if (buttonAdded) {
+              console.log('[Pajaritos] ✅ Button added near comment input successfully!');
+              return; // Exit early - we've added the button
+            }
+          } else {
+            console.log('[Pajaritos] ⚠️ Comment input is not the main post input, skipping button addition');
+          }
+          
+          // Try to find the modal/dialog container and search within it
+          let modalContainer = mainCommentInput.closest('[role="dialog"]') ||
+                              mainCommentInput.closest('[data-testid*="modal"]') ||
+                              mainCommentInput.closest('[data-testid*="Dialog"]') ||
+                              mainCommentInput.closest('div[aria-modal="true"]') ||
+                              mainCommentInput.closest('div[aria-label*="Publicación"]') ||
+                              mainCommentInput.closest('div[aria-label*="Post"]');
+          
+          if (modalContainer) {
+            console.log('[Pajaritos] 🔍 Found modal container, searching within it...');
+            
+            // Look for article elements within the modal
+            const articlesInModal = Array.from(modalContainer.querySelectorAll('div[role="article"]'));
+            console.log('[Pajaritos] 🔍 Found', articlesInModal.length, 'article(s) in modal');
+            
+            // FIRST: Find the article that contains the comment input
+            let articleWithInput = null;
+            for (const article of articlesInModal) {
+              if (article.contains(mainCommentInput)) {
+                articleWithInput = article;
+                console.log('[Pajaritos] ✅ Found article containing comment input in modal');
+                logPostMetadata(article, 'Article in modal (contains input)');
+                break;
+              }
+            }
+            
+            // If we found an article with the input, use it (even if isMainPost returns false, it's still the right one)
+            if (articleWithInput) {
+              // Check if it's a main post, but even if not, it's the one with the input so use it
+              if (isMainPost(articleWithInput)) {
+                console.log('[Pajaritos] ✅ Using article with input (isMainPost=true)');
+                posts = [articleWithInput];
+              } else {
+                // Still use it, but log a warning
+                console.log('[Pajaritos] ⚠️ Article with input failed isMainPost check, but using it anyway (it contains the input)');
+                posts = [articleWithInput];
+              }
+            } else {
+              // The input is NOT inside any article - it's probably a sibling or in a different structure
+              // Find the article that's closest to the input (same parent or nearby)
+              console.log('[Pajaritos] ⚠️ Comment input is not inside any article, finding closest article...');
+              
+              // Strategy 1: Find article that appears BEFORE the input in the DOM
+              // Main posts usually come before their comment sections
+              console.log('[Pajaritos] 🔍 Strategy 1: Looking for article before input in DOM...');
+              let element = mainCommentInput;
+              let articleBefore = null;
+              let searchDepth = 0;
+              
+              while (element && searchDepth < 20 && !articleBefore) {
+                // Check previous siblings
+                let sibling = element.previousElementSibling;
+                while (sibling && !articleBefore) {
+                  // Check if sibling is an article
+                  if (sibling.getAttribute('role') === 'article' && articlesInModal.includes(sibling)) {
+                    articleBefore = sibling;
+                    console.log('[Pajaritos] ✅ Found article as previous sibling');
+                    break;
+                  }
+                  // Check if sibling contains an article
+                  const articleInSibling = sibling.querySelector('div[role="article"]');
+                  if (articleInSibling && articlesInModal.includes(articleInSibling)) {
+                    articleBefore = articleInSibling;
+                    console.log('[Pajaritos] ✅ Found article in previous sibling');
+                    break;
+                  }
+                  sibling = sibling.previousElementSibling;
+                }
+                
+                // Check parent's previous siblings
+                if (!articleBefore && element.parentElement) {
+                  let parentSibling = element.parentElement.previousElementSibling;
+                  while (parentSibling && !articleBefore) {
+                    if (parentSibling.getAttribute('role') === 'article' && articlesInModal.includes(parentSibling)) {
+                      articleBefore = parentSibling;
+                      console.log('[Pajaritos] ✅ Found article as parent\'s previous sibling');
+                      break;
+                    }
+                    const articleInParentSibling = parentSibling.querySelector('div[role="article"]');
+                    if (articleInParentSibling && articlesInModal.includes(articleInParentSibling)) {
+                      articleBefore = articleInParentSibling;
+                      console.log('[Pajaritos] ✅ Found article in parent\'s previous sibling');
+                      break;
+                    }
+                    parentSibling = parentSibling.previousElementSibling;
+                  }
+                }
+                
+                element = element.parentElement;
+                searchDepth++;
+              }
+              
+              if (articleBefore) {
+                logPostMetadata(articleBefore, 'Article before input');
+                // Filter out if it's clearly a comment
+                const hasReplyButtons = articleBefore.querySelectorAll('[aria-label*="Responder"], [aria-label*="Reply"]').length;
+                const hasMainInput = articleBefore.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') !== null ||
+                                    articleBefore.querySelector('div[contenteditable="true"][aria-label*="Escribe una respuesta"]') !== null;
+                const isLikelyComment = hasReplyButtons > 0 && !hasMainInput;
+                
+                if (!isLikelyComment) {
+                  console.log('[Pajaritos] ✅ Using article before input (not a comment)');
+                  posts = [articleBefore];
+                } else {
+                  console.log('[Pajaritos] ⚠️ Article before input appears to be a comment, trying other strategies...');
+                  articleBefore = null; // Reset to try other strategies
+                }
+              }
+              
+              // Strategy 2: Find article that shares a common parent with the input
+              if (!articleBefore) {
+                console.log('[Pajaritos] 🔍 Strategy 2: Looking for article sharing parent with input...');
+                let inputParent = mainCommentInput.parentElement;
+                let levelsUp = 0;
+                
+                while (inputParent && levelsUp < 15 && !articleBefore) {
+                  // Look for articles that are siblings or children of this parent
+                  const nearbyArticles = Array.from(inputParent.querySelectorAll('div[role="article"]'));
+                  if (nearbyArticles.length > 0) {
+                    // Filter to only articles that are likely the main post (not comments)
+                    for (const article of nearbyArticles) {
+                      if (!articlesInModal.includes(article)) continue;
+                      
+                      // Check if it's likely a main post (not a comment)
+                      const hasReplyButtons = article.querySelectorAll('[aria-label*="Responder"], [aria-label*="Reply"]').length;
+                      const hasMainInput = article.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') !== null ||
+                                          article.querySelector('div[contenteditable="true"][aria-label*="Escribe una respuesta"]') !== null;
+                      const isLikelyComment = hasReplyButtons > 0 && !hasMainInput;
+                      
+                      // Also check if it's nested (comments are often nested)
+                      const parentArticle = article.closest('div[role="article"]');
+                      const isNested = parentArticle && parentArticle !== article;
+                      
+                      if (!isLikelyComment && !isNested) {
+                        articleBefore = article;
+                        console.log('[Pajaritos] ✅ Found nearby article (likely main post)');
+                        logPostMetadata(article, 'Nearby article (likely main post)');
+                        break;
+                      }
+                    }
+                  }
+                  
+                  inputParent = inputParent.parentElement;
+                  levelsUp++;
+                }
+                
+                if (articleBefore) {
+                  posts = [articleBefore];
+                }
+              }
+              
+              // Strategy 3: Filter all articles and use the first non-comment one
+              if (!articleBefore) {
+                console.log('[Pajaritos] 🔍 Strategy 3: Filtering all articles to find main post...');
+                console.log('[Pajaritos] 🔍 DEBUG: Analyzing', articlesInModal.length, 'articles...');
+                
+                const articleAnalysis = articlesInModal.map((article, idx) => {
+                  const hasReplyButtons = article.querySelectorAll('[aria-label*="Responder"], [aria-label*="Reply"]').length;
+                  const hasMainInput = article.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') !== null ||
+                                      article.querySelector('div[contenteditable="true"][aria-label*="Escribe una respuesta"]') !== null;
+                  const isLikelyComment = hasReplyButtons > 0 && !hasMainInput;
+                  
+                  // Check if nested (comments are often nested inside main posts)
+                  const parentArticle = article.closest('div[role="article"]');
+                  const isNested = parentArticle && parentArticle !== article;
+                  
+                  // Check if it has video/image (main posts often have media)
+                  const hasVideo = article.querySelector('video') !== null;
+                  const hasImage = article.querySelector('img[src*="scontent"]') !== null; // Facebook image
+                  
+                  // Check if it's near the comment input (main post should be near the input)
+                  const rect = article.getBoundingClientRect();
+                  const inputRect = mainCommentInput.getBoundingClientRect();
+                  const distance = Math.abs(rect.top - inputRect.top);
+                  
+                  // Check text content length (main posts are usually longer)
+                  const textLength = article.textContent?.length || 0;
+                  
+                  const analysis = {
+                    index: idx + 1,
+                    hasReplyButtons,
+                    hasMainInput,
+                    isLikelyComment,
+                    isNested,
+                    hasVideo,
+                    hasImage,
+                    distanceFromInput: Math.round(distance),
+                    textLength,
+                    isCandidate: !isLikelyComment && !isNested
+                  };
+                  
+                  console.log(`[Pajaritos] 🔍 DEBUG: Article ${idx + 1}:`, analysis);
+                  logPostMetadata(article, `Article ${idx + 1} analysis`);
+                  
+                  return { article, analysis };
+                });
+                
+                // Filter candidates
+                const mainPostCandidates = articleAnalysis
+                  .filter(({ analysis }) => analysis.isCandidate)
+                  .sort((a, b) => {
+                    // Prioritize: has media, closer to input, longer text
+                    if (a.analysis.hasVideo !== b.analysis.hasVideo) return b.analysis.hasVideo - a.analysis.hasVideo;
+                    if (a.analysis.hasImage !== b.analysis.hasImage) return b.analysis.hasImage - a.analysis.hasImage;
+                    if (Math.abs(a.analysis.distanceFromInput - b.analysis.distanceFromInput) > 100) {
+                      return a.analysis.distanceFromInput - b.analysis.distanceFromInput;
+                    }
+                    return b.analysis.textLength - a.analysis.textLength;
+                  });
+                
+                console.log('[Pajaritos] 🔍 DEBUG: Found', mainPostCandidates.length, 'candidate(s) after filtering');
+                
+                if (mainPostCandidates.length > 0) {
+                  const firstCandidate = mainPostCandidates[0].article;
+                  console.log('[Pajaritos] ✅ Using best candidate article (Strategy 3)');
+                  logPostMetadata(firstCandidate, 'Best candidate article');
+                  posts = [firstCandidate];
+                } else {
+                  // Last resort: use the article closest to the input
+                  console.log('[Pajaritos] ⚠️ No candidates found, using article closest to input...');
+                  const closestByDistance = articleAnalysis
+                    .sort((a, b) => a.analysis.distanceFromInput - b.analysis.distanceFromInput);
+                  
+                  if (closestByDistance.length > 0) {
+                    const closest = closestByDistance[0].article;
+                    console.log('[Pajaritos] ⚠️ Using closest article to input (last resort)');
+                    logPostMetadata(closest, 'Closest article (last resort)');
+                    posts = [closest];
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      // If we didn't find it via comment input, try finding posts with video (common for main posts)
+      // BUT prioritize posts that are visible and within any modal/dialog
+      if (posts.length === 0) {
+        console.log('[Pajaritos] 🔍 Trying to find post with video or main input...', openModal ? '(searching in modal)' : '(searching entire page)');
+        
+        // Use the searchScope we determined at the start (modal if exists, otherwise document)
+        const allPosts = searchScope.querySelectorAll('div[role="article"], div[data-ad-preview="message"], div[data-ad-comet-preview="message"]');
+        
+        // If we found the comment input earlier, prioritize posts that contain it
+        let postsWithInput = [];
+        if (mainCommentInput) {
+          postsWithInput = Array.from(allPosts).filter(post => post.contains(mainCommentInput));
+          if (postsWithInput.length > 0) {
+            console.log('[Pajaritos] ✅ Found', postsWithInput.length, 'post(s) containing the comment input');
+            postsWithInput.forEach((post, idx) => {
+              logPostMetadata(post, `Post ${idx + 1} (contains input)`);
+            });
+            // Use these posts directly - they contain the input we found
+            posts = postsWithInput;
+          }
+        }
+        
+        // If we didn't find posts with the input, try the video/main input filter
+        if (posts.length === 0) {
+          const postsWithVideo = Array.from(allPosts).filter(post => {
+            if (!isMainPost(post)) return false;
+            
+            // Check if post is visible (not hidden)
+            const rect = post.getBoundingClientRect();
+            const isVisible = rect.width > 0 && rect.height > 0 && 
+                             window.getComputedStyle(post).display !== 'none' &&
+                             window.getComputedStyle(post).visibility !== 'hidden';
+            
+            if (!isVisible) return false;
+            
+            // Check if it has the main comment input (most reliable indicator)
+            const hasMainInput = post.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') !== null ||
+                                post.querySelector('div[contenteditable="true"][aria-placeholder*="comentario público"]') !== null ||
+                                post.querySelector('div[contenteditable="true"][aria-label*="Escribe una respuesta"]') !== null;
+            
+            // Also check for video (common for photo/video posts)
+            const hasVideo = post.querySelector('video') !== null;
+            
+            return hasMainInput || hasVideo;
+          });
+          
+          if (postsWithVideo.length > 0) {
+            console.log(`[Pajaritos] ✅ Found ${postsWithVideo.length} post(s) with video or main input${openModal ? ' (in modal)' : ''}`);
+            postsWithVideo.forEach((post, idx) => {
+              logPostMetadata(post, `Post ${idx + 1} (with video/input)`);
+            });
+            posts = postsWithVideo;
+          }
+        }
+      }
+      
+      // If still not found, try finding by URL structure
+      if (posts.length === 0) {
+        const permalinkId = window.location.href.match(/\/permalink\/(\d+)/)?.[1] || 
+                           window.location.href.match(/\/posts\/(\d+)/)?.[1];
+        
+        if (permalinkId) {
+          console.log(`[Pajaritos] 🔍 Trying to find post by permalink ID: ${permalinkId}`);
+          // Look for elements that might contain the post ID
+          const postSelectors = [
+            `div[data-pagelet*="${permalinkId}"]`,
+            `div[data-testid*="${permalinkId}"]`,
+            'div[data-ad-preview="message"]',
+            'div[data-ad-comet-preview="message"]'
+          ];
+          
+          for (const selector of postSelectors) {
+            const found = searchScope.querySelectorAll(selector);
+            const filtered = Array.from(found).filter(post => {
+              if (!isMainPost(post)) return false;
+              // Check if it has video or is likely the main post
+              const hasVideo = post.querySelector('video') !== null;
+              const hasMainInput = post.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') !== null;
+              return hasVideo || hasMainInput;
+            });
+            
+            if (filtered.length > 0) {
+              console.log(`[Pajaritos] ✅ Found ${filtered.length} post(s) via selector: ${selector}`);
+              posts = filtered;
+              break;
+            }
+          }
+        }
+      }
+    }
+    
+    // Fallback to standard detection if permalink detection didn't work
+    // BUT: Only search within modal if one exists
+    if (posts.length === 0) {
+      console.log('[Pajaritos] 🔍 Fallback: Using standard detection...', openModal ? '(in modal)' : '(entire page)');
+      const postSelectors = [
+        'div[data-ad-preview="message"]',  // Try this first - most reliable for group posts
+        'div[data-ad-comet-preview="message"]',
+        'div[data-pagelet*="FeedUnit"]',
+        'div[role="article"]',
+        'div[data-testid*="post"]'
+      ];
+
+      for (const selector of postSelectors) {
+        const found = searchScope.querySelectorAll(selector);
+        if (found.length > 0) {
+          // Filter to only main posts, not comments
+          // In modals, we need to be more aggressive about filtering comments
+          const filtered = Array.from(found).filter(post => {
+            // First check isMainPost
+            if (!isMainPost(post)) return false;
+            
+            // In modals, filter out comments more aggressively
+            if (openModal) {
+              // Comments have "Responder" buttons but no main input
+              const hasReplyButtons = post.querySelectorAll('[aria-label*="Responder"], [aria-label*="Reply"]').length;
+              const hasMainInput = post.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') !== null ||
+                                  post.querySelector('div[contenteditable="true"][aria-label*="Escribe una respuesta"]') !== null ||
+                                  post.querySelector('div[contenteditable="true"][aria-label*="Escribe un comentario"]') !== null;
+              
+              // If it has reply buttons but no main input, it's a comment
+              if (hasReplyButtons > 0 && !hasMainInput) {
+                return false;
+              }
+              
+              // Check if it's nested inside another article (likely a comment)
+              const parentArticle = post.closest('div[role="article"]');
+              if (parentArticle && parentArticle !== post) {
+                return false;
+              }
+            }
+            
+            return true;
+          });
+          
+          if (filtered.length > 0) {
+            console.log(`[Pajaritos] ✅ Found ${filtered.length} post(s) via fallback selector: ${selector}`);
+            // Log metadata for each found post
+            filtered.forEach((post, idx) => {
+              logPostMetadata(post, `Fallback post ${idx + 1}`);
+            });
+            posts = filtered;
+            break;
+          }
         }
       }
     }
 
     if (posts.length === 0) {
       // Try a more general approach - look for posts by finding main comment buttons
-      const allCommentButtons = document.querySelectorAll('div[role="button"][aria-label*="Comment"], div[role="button"][aria-label*="Comentar"]');
-      
-      allCommentButtons.forEach(btn => {
-        const btnText = btn.textContent?.toLowerCase() || '';
-        const btnAriaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
+      // BUT: On permalink pages, prioritize finding the main post via comment input
+      // AND: Only search within modal if one exists
+      if (isPermalinkPage) {
+        console.log('[Pajaritos] 🔍 Permalink: Looking for main post via comment input...', openModal ? '(in modal)' : '');
+        const mainCommentInput = searchScope.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') ||
+                                 searchScope.querySelector('div[contenteditable="true"][aria-placeholder*="comentario público"]') ||
+                                 searchScope.querySelector('div[contenteditable="true"][aria-label*="Escribe una respuesta"]');
         
-        // STRICT: Only process "Comentar" buttons, NOT "Responder" buttons
-        if (btnText.includes('responder') || btnText.includes('reply') ||
-            btnAriaLabel.includes('responder') || btnAriaLabel.includes('reply')) {
-          return; // Skip reply buttons
-        }
-        
-        // Skip if this button is inside a comment structure
-        const commentContainer = btn.closest('[data-testid*="comment"]');
-        if (commentContainer) {
-          const parentArticle = commentContainer.closest('div[role="article"]');
-          if (parentArticle) {
-            return; // Skip comment reply buttons
+        if (mainCommentInput) {
+          // Go up the DOM tree to find the post
+          let post = mainCommentInput.closest('div[role="article"]');
+          if (!post) {
+            let parent = mainCommentInput.parentElement;
+            let levels = 0;
+            while (parent && levels < 15) {
+              if (parent.getAttribute('role') === 'article' || 
+                  parent.getAttribute('data-ad-preview') === 'message' ||
+                  parent.getAttribute('data-ad-comet-preview') === 'message') {
+                post = parent;
+                break;
+              }
+              parent = parent.parentElement;
+              levels++;
+            }
+          }
+          
+          if (post && isMainPost(post)) {
+            console.log('[Pajaritos] ✅ Found main post via comment input (fallback method)');
+            posts = [post];
           }
         }
+      }
+      
+      // If still not found, try finding by comment buttons (but be very strict)
+      if (posts.length === 0) {
+        const allCommentButtons = document.querySelectorAll('div[role="button"][aria-label*="Comment"], div[role="button"][aria-label*="Comentar"]');
         
-        // Find the post container (go up the DOM tree)
-        let post = btn.closest('div[role="article"]') || 
-                   btn.closest('div[data-pagelet*="FeedUnit"]') ||
-                   btn.closest('div[data-testid*="post"]') ||
-                   btn.closest('div[data-ad-preview="message"]') ||
-                   btn.closest('div[data-ad-comet-preview="message"]');
-        
-        // Make sure it's a main post
-        if (post && isMainPost(post) && !post.querySelector('.pajaritos-reply-btn')) {
-          posts.push(post);
-        }
-      });
+        allCommentButtons.forEach(btn => {
+          const btnText = btn.textContent?.toLowerCase() || '';
+          const btnAriaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
+          
+          // STRICT: Only process "Comentar" buttons, NOT "Responder" buttons
+          if (btnText.includes('responder') || btnText.includes('reply') ||
+              btnAriaLabel.includes('responder') || btnAriaLabel.includes('reply')) {
+            return; // Skip reply buttons
+          }
+          
+          // Skip if this button is inside a comment structure
+          const commentContainer = btn.closest('[data-testid*="comment"]');
+          if (commentContainer) {
+            return; // Skip comment reply buttons
+          }
+          
+          // Check if button is near a main post comment input (not a reply input)
+          const nearbyInput = btn.closest('div[role="article"]')?.querySelector('div[contenteditable="true"][aria-label*="comentario público"]');
+          if (!nearbyInput) {
+            return; // Skip if no main post input nearby
+          }
+          
+          // Find the post container (go up the DOM tree)
+          let post = btn.closest('div[role="article"]') || 
+                     btn.closest('div[data-pagelet*="FeedUnit"]') ||
+                     btn.closest('div[data-testid*="post"]') ||
+                     btn.closest('div[data-ad-preview="message"]') ||
+                     btn.closest('div[data-ad-comet-preview="message"]');
+          
+          // Make sure it's a main post and has the main comment input
+          if (post && isMainPost(post) && post.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') && !post.querySelector('.pajaritos-reply-btn')) {
+            posts.push(post);
+          }
+        });
+      }
     }
     
     if (posts.length === 0) {
+      console.log('[Pajaritos] ⚠️ No posts detected on page');
+      
+      // LAST RESORT: If we have a modal but couldn't find posts, try to find comment input in entire document
+      // This handles cases where modal structure is different (e.g., group page modals)
+      if (openModal) {
+        console.log('[Pajaritos] 🔍 Last resort: Searching entire document for comment input (modal detected but no posts found)...');
+        
+        // Search entire document for comment input (not just modal)
+        const fallbackInput = document.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') ||
+                             document.querySelector('div[contenteditable="true"][aria-placeholder*="comentario público"]') ||
+                             document.querySelector('div[contenteditable="true"][aria-label*="public comment"]') ||
+                             document.querySelector('div[contenteditable="true"][aria-label*="Escribe una respuesta"]') ||
+                             document.querySelector('div[contenteditable="true"][aria-label*="Write a response"]') ||
+                             document.querySelector('div[contenteditable="true"][aria-label*="Escribe un comentario"]') ||
+                             document.querySelector('div[contenteditable="true"][aria-label*="Write a comment"]') ||
+                             document.querySelector('div[contenteditable="true"][placeholder*="Escribe un comentario"]') ||
+                             document.querySelector('div[contenteditable="true"][placeholder*="Write a comment"]');
+        
+        if (fallbackInput && fallbackInput.offsetParent !== null) {
+          const inputLabel = fallbackInput.getAttribute('aria-label') || 
+                            fallbackInput.getAttribute('aria-placeholder') || 
+                            fallbackInput.getAttribute('placeholder') || '';
+          const isMainInput = inputLabel.toLowerCase().includes('escribe una respuesta') ||
+                             inputLabel.toLowerCase().includes('escribe un comentario') ||
+                             inputLabel.toLowerCase().includes('comentario público') ||
+                             inputLabel.toLowerCase().includes('public comment') ||
+                             inputLabel.toLowerCase().includes('write a response') ||
+                             inputLabel.toLowerCase().includes('write a comment');
+          
+          if (isMainInput) {
+            console.log('[Pajaritos] ✅ Found comment input in document (last resort), label:', inputLabel.substring(0, 50));
+            console.log('[Pajaritos] 🎯 Using addButtonNearCommentInput approach...');
+            const buttonAdded = addButtonNearCommentInput(fallbackInput);
+            if (buttonAdded) {
+              console.log('[Pajaritos] ✅ Button added near comment input (last resort method)!');
+              return; // Exit early - we've added the button
+            }
+          } else {
+            console.log('[Pajaritos] ⚠️ Found input but it\'s not the main post input, label:', inputLabel.substring(0, 50));
+          }
+        } else {
+          console.log('[Pajaritos] ⚠️ No visible comment input found in entire document either');
+        }
+      }
+      
+      // If we still haven't found anything, return
       return;
     }
     
-    posts.forEach((post) => {
+    console.log(`[Pajaritos] 📊 Found ${posts.length} post(s) on page`);
+    
+    // Filter out suggested posts, sponsored posts, and other non-main content
+    // Prioritize posts that are likely the main focus
+    let mainPosts = posts.filter(post => {
+      // Check if it's a suggested post or ad
+      const isSuggested = post.querySelector('[data-testid*="suggested"]') !== null ||
+                          post.querySelector('[aria-label*="sugerencia"]') !== null ||
+                          post.querySelector('[aria-label*="suggested"]') !== null ||
+                          post.textContent?.includes('Sugerencia') ||
+                          post.textContent?.includes('Suggested');
+      
+      // Check if it's a sponsored post
+      const isSponsored = post.querySelector('[data-testid*="sponsored"]') !== null ||
+                          post.textContent?.includes('Patrocinado') ||
+                          post.textContent?.includes('Sponsored');
+      
+      // Check if it's in the main feed area (not sidebar)
+      const isInSidebar = post.closest('[role="complementary"]') !== null ||
+                          post.closest('[data-pagelet*="RightRail"]') !== null;
+      
+      // STRICT: Check if it's a comment (has "Responder" button but not main post input)
+      const hasReplyButton = post.querySelector('[aria-label*="Responder"]') !== null ||
+                            post.querySelector('[aria-label*="Reply"]') !== null ||
+                            post.textContent?.includes('Responder') ||
+                            post.textContent?.includes('Reply');
+      const hasMainPostInput = post.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') !== null ||
+                               post.querySelector('div[contenteditable="true"][aria-placeholder*="comentario público"]') !== null;
+      const isComment = hasReplyButton && !hasMainPostInput;
+      
+      // Check if it's in a comments section (nested in comment structure)
+      const inCommentSection = post.closest('[data-testid*="comment"]') !== null &&
+                               !post.querySelector('div[contenteditable="true"][aria-label*="comentario público"]');
+      
+      // On permalink pages, ONLY accept posts with main comment input
+      if (isPermalinkPage && !hasMainPostInput) {
+        return false; // Reject posts without main input on permalink pages
+      }
+      
+      return !isSuggested && !isSponsored && !isInSidebar && !isComment && !inCommentSection;
+    });
+    
+    // On permalink pages, be very strict - only keep posts with main comment input
+    if (isPermalinkPage && mainPosts.length > 1) {
+      console.log('[Pajaritos] 🔍 Permalink page detected, applying strict filtering...');
+      
+      // First, try to find the post that contains the main comment input
+      const mainCommentInput = document.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') ||
+                               document.querySelector('div[contenteditable="true"][aria-placeholder*="comentario público"]');
+      
+      if (mainCommentInput) {
+        console.log('[Pajaritos] 🔍 Main comment input found, finding containing post...');
+        // Find which post contains this input
+        const postWithInput = mainPosts.find(post => post.contains(mainCommentInput));
+        if (postWithInput) {
+          console.log('[Pajaritos] ✅ Found main post via comment input field');
+          mainPosts = [postWithInput];
+        } else {
+          console.log('[Pajaritos] ⚠️ Comment input not found in any detected post, filtering by input presence...');
+          // If not found, filter by having the input
+          const postsWithMainInput = mainPosts.filter(post => {
+            return post.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') !== null ||
+                   post.querySelector('div[contenteditable="true"][aria-placeholder*="comentario público"]') !== null;
+          });
+          
+          if (postsWithMainInput.length > 0) {
+            console.log(`[Pajaritos] ✅ Found ${postsWithMainInput.length} post(s) with main comment input`);
+            mainPosts = postsWithMainInput;
+          } else {
+            console.log('[Pajaritos] ⚠️ No posts with main comment input found, trying video filter...');
+            // If no posts have the input, try filtering by video
+            const postsWithVideo = mainPosts.filter(post => post.querySelector('video') !== null);
+            if (postsWithVideo.length > 0) {
+              console.log(`[Pajaritos] ✅ Filtered to ${postsWithVideo.length} post(s) with video`);
+              mainPosts = postsWithVideo;
+            }
+          }
+        }
+      } else {
+        console.log('[Pajaritos] ⚠️ Main comment input not found on page, trying video filter...');
+        // If no main input found, prioritize posts with video
+        const postsWithVideo = mainPosts.filter(post => post.querySelector('video') !== null);
+        if (postsWithVideo.length > 0) {
+          console.log(`[Pajaritos] ✅ Filtered to ${postsWithVideo.length} post(s) with video`);
+          mainPosts = postsWithVideo;
+        }
+      }
+    }
+    
+    // If we still have multiple posts, try to find the one in the main content area
+    if (mainPosts.length > 1) {
+      const mainContentArea = document.querySelector('[role="main"]') || 
+                             document.querySelector('div[data-pagelet*="MainFeed"]') ||
+                             document.querySelector('div[data-pagelet*="FeedUnit"]')?.closest('div');
+      
+      if (mainContentArea) {
+        const postsInMainArea = mainPosts.filter(post => mainContentArea.contains(post));
+        if (postsInMainArea.length > 0) {
+          console.log(`[Pajaritos] ✅ Filtered to ${postsInMainArea.length} post(s) in main content area`);
+          mainPosts = postsInMainArea;
+        }
+      }
+    }
+    
+    // If we filtered out some posts, use the filtered list
+    const postsToProcess = mainPosts.length > 0 ? mainPosts : posts;
+    
+    console.log(`[Pajaritos] 📊 After filtering: ${postsToProcess.length} main post(s)`);
+    console.log(`[Pajaritos] 📊 mainPosts.length: ${mainPosts.length}, posts.length: ${posts.length}`);
+    
+    if (postsToProcess.length > 1) {
+      console.log('[Pajaritos] 🔍 Debug: Multiple posts detected. Post details:');
+      postsToProcess.forEach((post, idx) => {
+        const hasMainInput = post.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') !== null;
+        const hasReplyBtn = post.querySelector('[aria-label*="Responder"]') !== null;
+        const textPreview = post.textContent?.substring(0, 50) || 'no text';
+        console.log(`  Post ${idx + 1}: hasMainInput=${hasMainInput}, hasReplyBtn=${hasReplyBtn}, preview="${textPreview}..."`);
+      });
+    }
+    
+    if (postsToProcess.length === 0) {
+      console.warn('[Pajaritos] ⚠️ No posts to process after filtering!');
+      return;
+    }
+    
+    // Show button on posts that have the main comment input (the actual main post)
+    // On permalink pages, prioritize the post with main comment input
+    // On feed pages, show button on all main posts
+    postsToProcess.forEach((post, index) => {
+      console.log(`[Pajaritos] 🔍 Processing post ${index + 1}/${postsToProcess.length}...`);
+      logPostMetadata(post, `Post ${index + 1} (to process)`);
+      
+      // Check if it has the main comment input (this identifies the actual main post)
+      // Facebook uses different labels depending on context (e.g. "comentario público", "Escribe un comentario...")
+      const mainInputInPost =
+        // Standard main comment input
+        post.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') ||
+        post.querySelector('div[contenteditable="true"][aria-placeholder*="comentario público"]') ||
+        post.querySelector('div[contenteditable="true"][aria-label*="public comment"]') ||
+        // Group/feed style: "Escribe un comentario..."
+        post.querySelector('div[contenteditable="true"][aria-label*="Escribe un comentario"]') ||
+        post.querySelector('div[contenteditable="true"][aria-placeholder*="Escribe un comentario"]') ||
+        post.querySelector('div[contenteditable="true"][placeholder*="Escribe un comentario"]') ||
+        // Generic English variants
+        post.querySelector('div[contenteditable="true"][aria-label*="Write a comment"]') ||
+        post.querySelector('div[contenteditable="true"][aria-placeholder*="Write a comment"]') ||
+        post.querySelector('div[contenteditable="true"][placeholder*="Write a comment"]');
+      // Check if input is actually visible (not hidden)
+      const hasMainInput = mainInputInPost !== null && mainInputInPost.offsetParent !== null;
+      
+      // If input exists but is not visible, check if we can open it by clicking "Comentar"
+      let canOpenInput = false;
+      if (mainInputInPost && mainInputInPost.offsetParent === null) {
+        const commentButton = findCommentButton(post);
+        if (commentButton) {
+          canOpenInput = true;
+          console.log('[Pajaritos] ℹ️ Comment input exists but is hidden, "Comentar" button found - can open it');
+        } else {
+          console.log('[Pajaritos] ⚠️ Comment input exists but is hidden, and "Comentar" button not found');
+        }
+      }
+      
+      // Also check if the post contains the main comment input we found earlier (if we found one)
+      // OR if the comment input is near this post (same parent structure)
+      let containsKnownInput = false;
+      let isNearKnownInput = false;
+      
+      if (isPermalinkPage && mainCommentInput) {
+        // Check if post contains the input
+        if (post.contains(mainCommentInput)) {
+          containsKnownInput = true;
+          console.log('[Pajaritos] ✅ Post contains the known main comment input');
+        } else {
+          // Check if input is near the post (same parent or sibling structure)
+          // Get the input's position
+          const inputRect = mainCommentInput.getBoundingClientRect();
+          const postRect = post.getBoundingClientRect();
+          
+          // Check if they're close vertically (input should be below the post)
+          const verticalDistance = inputRect.top - postRect.bottom;
+          const horizontalOverlap = !(inputRect.right < postRect.left || inputRect.left > postRect.right);
+          
+          // If input is within 500px below the post and horizontally aligned, they're related
+          if (verticalDistance >= 0 && verticalDistance < 500 && horizontalOverlap) {
+            isNearKnownInput = true;
+            console.log('[Pajaritos] ✅ Post is near the known comment input (distance:', Math.round(verticalDistance), 'px)');
+          }
+          
+          // Also check if they share a common parent (more reliable)
+          let inputParent = mainCommentInput.parentElement;
+          let postParent = post.parentElement;
+          let commonParent = null;
+          let levels = 0;
+          
+          while (inputParent && levels < 10) {
+            if (post.contains(inputParent) || inputParent.contains(post)) {
+              commonParent = inputParent;
+              break;
+            }
+            inputParent = inputParent.parentElement;
+            levels++;
+          }
+          
+          if (commonParent && !post.contains(mainCommentInput)) {
+            // They share a parent but post doesn't contain input
+            // Check if post is the main article in that parent
+            const articlesInParent = Array.from(commonParent.querySelectorAll('div[role="article"]'));
+            if (articlesInParent.length > 0 && articlesInParent[0] === post) {
+              isNearKnownInput = true;
+              console.log('[Pajaritos] ✅ Post is the first article in shared parent with comment input');
+            }
+          }
+        }
+      }
+      
+      // Only show button if input is visible OR can be opened via "Comentar" button
+      const shouldShowButton = hasMainInput || canOpenInput || containsKnownInput || isNearKnownInput;
+      
+      console.log(`[Pajaritos] 📋 Post ${index + 1} check: hasMainInput=${hasMainInput}, canOpenInput=${canOpenInput}, containsKnownInput=${containsKnownInput}, isNearKnownInput=${isNearKnownInput}, shouldShowButton=${shouldShowButton}`);
+      
+      // On permalink pages, ONLY show button on posts with main input (the actual post being viewed)
+      if (isPermalinkPage) {
+        if (!shouldShowButton) {
+          // Remove button if it exists (this is a background/suggested post)
+          const existingBtn = post.querySelector('.pajaritos-reply-btn');
+          if (existingBtn) {
+            console.log('[Pajaritos] 🗑️ Removing button from background post (no main input)');
+            existingBtn.remove();
+          }
+          console.log(`[Pajaritos] ⏭️ Skipping post ${index + 1} (no main input on permalink page)`);
+          return; // Skip posts without main input on permalink pages
+        }
+      }
+      
+      // On feed pages, also check if input is visible or can be opened
+      if (!isPermalinkPage && !hasMainInput && !canOpenInput) {
+        console.log(`[Pajaritos] ⏭️ Skipping post ${index + 1} (comment input not visible and cannot be opened)`);
+        return; // Skip posts where comment section is not open and cannot be opened
+      }
+      
+      // Add button to this post
       if (!post.querySelector('.pajaritos-reply-btn')) {
-        createReplyButton(post);
+        console.log(`[Pajaritos] ✅ Adding button to main post${isPermalinkPage ? ' (permalink page)' : ''} - Post ${index + 1}`);
+        const result = createReplyButton(post);
+        if (!result) {
+          console.error('[Pajaritos] ❌ createReplyButton returned false - button was NOT created');
+        } else {
+          console.log('[Pajaritos] ✅ createReplyButton returned true - button should be created');
+        }
+      } else {
+        console.log('[Pajaritos] ℹ️ Button already exists on this post');
       }
     });
+    
+    // Cleanup: Remove buttons that were incorrectly added to comment reply inputs
+    const allButtons = document.querySelectorAll('.pajaritos-reply-btn');
+    allButtons.forEach(btn => {
+      // Find the nearest input field
+      const modal = btn.closest('[role="dialog"]');
+      if (!modal) return;
+      
+      // Check if button is near a comment reply input (not main post input)
+      const nearbyInput = btn.parentElement?.querySelector('div[contenteditable="true"]') ||
+                         btn.previousElementSibling?.querySelector('div[contenteditable="true"]') ||
+                         btn.nextElementSibling?.querySelector('div[contenteditable="true"]');
+      
+      if (nearbyInput) {
+        // Check if this input is a reply input (not main post input)
+        const isReplyInput = nearbyInput.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== null ||
+                            nearbyInput.closest('div[data-testid*="comment_replies"]') !== null ||
+                            nearbyInput.closest('div[data-testid*="comment_reply"]') !== null;
+        
+        const inputLabel = nearbyInput.getAttribute('aria-label') || 
+                          nearbyInput.getAttribute('aria-placeholder') || '';
+        const isMainInput = inputLabel.toLowerCase().includes('escribe una respuesta') ||
+                           inputLabel.toLowerCase().includes('escribe un comentario') ||
+                           inputLabel.toLowerCase().includes('comentario público') ||
+                           inputLabel.toLowerCase().includes('public comment') ||
+                           inputLabel.toLowerCase().includes('write a response');
+        
+        if (isReplyInput || !isMainInput) {
+          console.log('[Pajaritos] 🗑️ Removing button from comment reply input (not main post)');
+          btn.remove();
+        }
+      }
+    });
+    } catch (error) {
+      console.error('[Pajaritos] Error in addButtonsToPosts:', error);
+    }
   }
 
-  // Observer for new posts
-  const observer = new MutationObserver(() => {
-    addButtonsToPosts();
+  // Debounce function to prevent excessive calls
+  let debounceTimer = null;
+  function debouncedAddButtons() {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+    debounceTimer = setTimeout(() => {
+      addButtonsToPosts();
+    }, 500); // Wait 500ms after last mutation before processing
+  }
+
+  // Observer for new posts - debounced to prevent performance issues
+  const observer = new MutationObserver((mutations) => {
+    // Only process if there are actual relevant changes
+    const hasRelevantChanges = mutations.some(mutation => {
+      return mutation.type === 'childList' && mutation.addedNodes.length > 0;
+    });
+    
+    if (hasRelevantChanges) {
+      debouncedAddButtons();
+    }
   });
 
   // Start observing
@@ -2606,18 +4001,18 @@
     addButtonsToPosts();
   }
 
-  // Periodic check
+  // Periodic check - reduced frequency to prevent performance issues
   setInterval(() => {
     addButtonsToPosts();
-  }, 3000);
+  }, 5000); // Increased from 3000ms to 5000ms
 
   // Initial check after a delay
   setTimeout(() => {
-    console.log('[Pajaritos de Guardia] Running initial post scan...');
+    console.log('[Voluntarios de Guardia] Running initial post scan...');
     addButtonsToPosts();
   }, 2000);
 
-  console.log('[Pajaritos de Guardia] Content script loaded - Manual mode');
+  console.log('[Voluntarios de Guardia] Content script loaded - Manual mode');
   console.log('[Pajaritos] Current URL:', window.location.href);
   console.log('[Pajaritos] Ready to add reply buttons to posts');
 })();
