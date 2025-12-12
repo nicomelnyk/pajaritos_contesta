@@ -1,7 +1,7 @@
 // Background service worker for Chrome extension
 
 // Storage version to track migrations
-const STORAGE_VERSION = '2.1.0';
+const STORAGE_VERSION = '2.1.1';
 
 // Migration function to preserve data across reinstalls
 async function migrateStorageData() {

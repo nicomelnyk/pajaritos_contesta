@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0CNJ+74t4I04IhEsE6BP7KOBb+lgaPfwGnHBDQLdVb2lgAdbS3QMERvF9lu/vIWVJIeUpicBlw5WuQ79jEgBioAxCHLYpcg66bHWtSZGGLqdYlNRI/2Z9vUbfDIuf9hqfYib6uO9uu0c3LQB9DyWJqLNlNEOzVUCDEVXODlpfHz0L00Raco/nApSs1XM87tHqRvJsnkaXNaUwIzuX81Mi7zKo0ATZ6vZCa/0daojV48uGhzF/TMUHSYU2mRALdM9y1HVfseyaICd+JaDXUQ+m/7EeluIp4kC/wWkfwTaYNUQvbtw7ZgJtdIIngpll+/Ebd2TyXUt7o791Itx+faO5wIDAQAB",
   "name": "Voluntarios de Guardia",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Herramienta de asistencia para responder publicaciones de Facebook con respuestas predefinidas sobre cuidado de aves",
   "permissions": [
     "storage",
