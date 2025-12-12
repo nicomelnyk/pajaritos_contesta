@@ -1,0 +1,28 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="60" fill="#1877f2"/>
+  
+  <!-- Pigeon body -->
+  <ellipse cx="64" cy="75" rx="25" ry="20" fill="#ffffff"/>
+  
+  <!-- Pigeon head -->
+  <circle cx="64" cy="50" r="18" fill="#ffffff"/>
+  
+  <!-- Pigeon beak -->
+  <path d="M 50 50 L 45 55 L 50 55 Z" fill="#ffa500"/>
+  
+  <!-- Pigeon eye -->
+  <circle cx="70" cy="48" r="4" fill="#000000"/>
+  <circle cx="71" cy="47" r="1.5" fill="#ffffff"/>
+  
+  <!-- Pigeon wing -->
+  <ellipse cx="55" cy="70" rx="12" ry="15" fill="#e0e0e0"/>
+  
+  <!-- Pigeon tail -->
+  <path d="M 85 80 L 95 85 L 90 90 L 85 88 Z" fill="#e0e0e0"/>
+  
+  <!-- Decorative lines on wing -->
+  <path d="M 50 65 Q 55 70 60 65" stroke="#c0c0c0" stroke-width="1.5" fill="none"/>
+  <path d="M 50 75 Q 55 80 60 75" stroke="#c0c0c0" stroke-width="1.5" fill="none"/>
+</svg>
+

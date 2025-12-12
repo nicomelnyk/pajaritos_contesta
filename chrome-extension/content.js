@@ -561,6 +561,60 @@
   function addButtonNearCommentInput(commentInput) {
     console.log('[Pajaritos] 🔘 addButtonNearCommentInput called for input:', commentInput);
     
+    // Skip if this is a "Escribe una respuesta pública..." input (not needed there)
+    const ariaLabel = commentInput.getAttribute('aria-label') || '';
+    const ariaPlaceholder = commentInput.getAttribute('aria-placeholder') || '';
+    const placeholder = commentInput.getAttribute('placeholder') || '';
+    const inputText = commentInput.textContent || '';
+    
+    const isPublicReplyInput = ariaLabel.toLowerCase().includes('escribe una respuesta pública') ||
+                              ariaPlaceholder.toLowerCase().includes('escribe una respuesta pública') ||
+                              placeholder.toLowerCase().includes('escribe una respuesta pública') ||
+                              inputText.toLowerCase().includes('escribe una respuesta pública');
+    
+    if (isPublicReplyInput) {
+      console.log('[Pajaritos] ⏭️ Skipping button - this is a "Escribe una respuesta pública..." input (not needed)');
+      return false;
+    }
+    
+    // CRITICAL: Only add button if this input is on a MAIN POST, not on a comment
+    // Find the closest article element
+    const closestArticle = commentInput.closest('div[role="article"]');
+    if (closestArticle) {
+      // Check if it's a main post (not a comment)
+      if (!isMainPost(closestArticle)) {
+        console.log('[Pajaritos] ⏭️ Skipping button - this input is on a comment, not a main post');
+        return false;
+      }
+      
+      // Additional check: if the input is nested inside another article that's within this article,
+      // it's likely a comment reply input, not a main post input
+      const allArticles = closestArticle.querySelectorAll('div[role="article"]');
+      for (const nestedArticle of allArticles) {
+        if (nestedArticle !== closestArticle && nestedArticle.contains(commentInput)) {
+          // The input is inside a nested article (likely a comment), skip it
+          console.log('[Pajaritos] ⏭️ Skipping button - this input is nested inside a comment article');
+          return false;
+        }
+      }
+    } else {
+      // If we can't find an article, be cautious and check if it's in a comment structure
+      // But don't reject if it's "Escribe una respuesta" (without "pública") - those can be main post inputs
+      const inputLabel = (commentInput.getAttribute('aria-label') || commentInput.getAttribute('aria-placeholder') || '').toLowerCase();
+      const isEscribeUnaRespuesta = inputLabel.includes('escribe una respuesta') && !inputLabel.includes('pública');
+      
+      // Only check for comment reply structure if it's NOT a main post "Escribe una respuesta" input
+      if (!isEscribeUnaRespuesta) {
+        const isInCommentReply = commentInput.closest('[data-testid*="comment_replies"]') !== null ||
+                                 (commentInput.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== null && 
+                                  commentInput.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== commentInput);
+        if (isInCommentReply) {
+          console.log('[Pajaritos] ⏭️ Skipping button - this input appears to be in a comment reply structure');
+          return false;
+        }
+      }
+    }
+    
     // Check if button already exists DIRECTLY near this specific input
     // Check in the input's immediate container and siblings
     const inputContainer = commentInput.parentElement;
@@ -680,28 +734,27 @@
     // Create button
     const replyBtn = document.createElement('div');
     replyBtn.className = 'pajaritos-reply-btn';
-    replyBtn.innerHTML = '🐦';
+    const iconUrl = chrome.runtime.getURL('icon48.png');
+    replyBtn.innerHTML = `<img src="${iconUrl}" alt="🐦" style="width: 28px; height: 28px; display: block;" />`;
     replyBtn.style.cssText = `
       display: inline-flex;
       align-items: center;
-      padding: 6px 12px;
+      justify-content: center;
+      padding: 4px 6px;
       margin-left: 8px;
-      background: #1877f2;
-      color: white;
+      background: #e0e0e0;
       border-radius: 6px;
       cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
       transition: background 0.2s;
       z-index: 10000;
     `;
     
     replyBtn.addEventListener('mouseenter', () => {
-      replyBtn.style.background = '#166fe5';
+      replyBtn.style.background = '#d0d0d0';
     });
     
     replyBtn.addEventListener('mouseleave', () => {
-      replyBtn.style.background = '#1877f2';
+      replyBtn.style.background = '#e0e0e0';
     });
     
     // Add click handler
@@ -876,21 +929,20 @@
     // Create and insert the button
     const replyBtn = document.createElement('div');
     replyBtn.className = 'pajaritos-reply-btn';
-    replyBtn.innerHTML = '🐦';
+    const iconUrl = chrome.runtime.getURL('icon48.png');
+    replyBtn.innerHTML = `<img src="${iconUrl}" alt="🐦" style="width: 30px; height: 30px; display: block;" />`;
     replyBtn.style.cssText = `
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 32px;
-      height: 32px;
+      width: 40px;
+      height: 40px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #1877f2 0%, #42b72a 100%);
-      color: white;
-      font-size: 18px;
+      background: #e0e0e0;
       cursor: pointer;
       margin: 8px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-      transition: transform 0.2s, box-shadow 0.2s;
+      transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
       z-index: 10000;
       position: relative;
     `;
@@ -900,11 +952,13 @@
     replyBtn.addEventListener('mouseenter', () => {
       replyBtn.style.transform = 'scale(1.1)';
       replyBtn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.25)';
+      replyBtn.style.background = '#d0d0d0';
     });
     
     replyBtn.addEventListener('mouseleave', () => {
       replyBtn.style.transform = 'scale(1)';
       replyBtn.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+      replyBtn.style.background = '#e0e0e0';
     });
     
     replyBtn.addEventListener('click', (e) => {
@@ -969,6 +1023,18 @@
   // Create reply button for a post
   function createReplyButton(postElement) {
     console.log('[Pajaritos] 🔘 createReplyButton called for post:', postElement);
+    
+    // CRITICAL: Only add button to MAIN POSTS, not comments
+    if (!isMainPost(postElement)) {
+      console.log('[Pajaritos] ⏭️ Skipping button - this is a comment, not a main post');
+      return false;
+    }
+    
+    // Additional check: if this is shared content, skip it
+    if (isSharedContent(postElement)) {
+      console.log('[Pajaritos] ⏭️ Skipping button - this is shared content/image');
+      return false;
+    }
     
     // STRONGER CHECK: Check if button already exists anywhere near this post
     // Check within post element
@@ -1106,27 +1172,26 @@
     // Create button
     const replyBtn = document.createElement('div');
     replyBtn.className = 'pajaritos-reply-btn';
-    replyBtn.innerHTML = '🐦';
+    const iconUrl = chrome.runtime.getURL('icon48.png');
+    replyBtn.innerHTML = `<img src="${iconUrl}" alt="🐦" style="width: 28px; height: 28px; display: block;" />`;
     replyBtn.style.cssText = `
       display: inline-flex;
       align-items: center;
-      padding: 6px 12px;
+      justify-content: center;
+      padding: 4px 6px;
       margin-left: 8px;
-      background: #1877f2;
-      color: white;
+      background: #e0e0e0;
       border-radius: 6px;
       cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
       transition: background 0.2s;
     `;
 
     replyBtn.addEventListener('mouseenter', () => {
-      replyBtn.style.background = '#166fe5';
+      replyBtn.style.background = '#d0d0d0';
     });
 
     replyBtn.addEventListener('mouseleave', () => {
-      replyBtn.style.background = '#1877f2';
+      replyBtn.style.background = '#e0e0e0';
     });
 
     // Add click handler
@@ -1171,6 +1236,48 @@
         // Verify button is actually in DOM immediately
         if (insertTarget.contains(replyBtn)) {
           console.log('[Pajaritos] ✅ Button verified in insertTarget immediately');
+          
+          // Set up MutationObserver to detect if Facebook removes the button
+          const observer = new MutationObserver((mutations) => {
+            // Check if our button was removed
+            if (!insertTarget.contains(replyBtn) && !document.contains(replyBtn)) {
+              console.log('[Pajaritos] ⚠️ Button was removed by Facebook DOM update, attempting to re-add...');
+              observer.disconnect();
+              
+              // Try to re-add the button after a short delay
+              setTimeout(() => {
+                // Find the insert target again (it might have changed)
+                const newInsertTarget = findCommentButton(postElement)?.parentElement ||
+                                      postElement.querySelector('div[role="group"]') ||
+                                      postElement.querySelector('div[role="toolbar"]') ||
+                                      insertTarget;
+                
+                if (newInsertTarget && document.contains(newInsertTarget)) {
+                  try {
+                    newInsertTarget.appendChild(replyBtn);
+                    console.log('[Pajaritos] ✅ Button re-added after removal');
+                  } catch (e) {
+                    console.warn('[Pajaritos] ⚠️ Could not re-add button:', e);
+                  }
+                }
+              }, 100);
+            }
+          });
+          
+          // Observe the insert target and its parent for child removals
+          if (insertTarget.parentElement) {
+            observer.observe(insertTarget.parentElement, {
+              childList: true,
+              subtree: true
+            });
+          }
+          observer.observe(insertTarget, {
+            childList: true
+          });
+          
+          // Disconnect observer after 30 seconds to avoid memory leaks
+          setTimeout(() => observer.disconnect(), 30000);
+          
           return true;
         } else {
           console.error('[Pajaritos] ❌ Button NOT found in insertTarget after insertion!');
@@ -1297,7 +1404,10 @@
         transition: background-color 0.2s;
       " onmouseover="this.style.backgroundColor='#e4e6eb'" onmouseout="this.style.backgroundColor='#f0f2f5'" title="Cerrar">×</button>
       
-      <h2 style="margin: 0 0 20px 0; color: #1877f2; font-size: 20px;">🐦 Voluntarios de Guardia</h2>
+      <h2 style="margin: 0 0 20px 0; color: #1877f2; font-size: 20px; display: flex; align-items: center; gap: 8px;">
+        <img src="${chrome.runtime.getURL('icon48.png')}" alt="🐦" style="width: 24px; height: 24px; display: block;" />
+        Voluntarios de Guardia
+      </h2>
       
       <div style="margin-bottom: 20px;">
         <label style="display: block; margin-bottom: 8px; font-weight: 500; color: #333;">Seleccionar opción:</label>
@@ -2568,9 +2678,9 @@
               !text.includes('responder') && !text.includes('reply') &&
               !ariaLabel.includes('responder') && !ariaLabel.includes('reply')) {
             btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            await wait(300);
+            await wait(450);
             btn.click();
-            await wait(2000);
+            await wait(3000);
             commentButtonClicked = true;
             break;
           }
@@ -2578,9 +2688,9 @@
         
         if (!commentButtonClicked && buttons.length >= 2) {
           buttons[1].scrollIntoView({ behavior: 'smooth', block: 'center' });
-          await wait(300);
+          await wait(450);
           buttons[1].click();
-          await wait(2000);
+          await wait(3000);
           commentButtonClicked = true;
         }
       }
@@ -2619,9 +2729,9 @@
                   !text.includes('responder') && !text.includes('reply') &&
                   !ariaLabel.includes('responder') && !ariaLabel.includes('reply')) {
                 btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                await wait(300);
+                await wait(450);
                 btn.click();
-                await wait(2000);
+                await wait(3000);
                 break;
               }
             }
@@ -2653,7 +2763,7 @@
           
           // Wait a bit before posting next comment
           if (i < replies.length - 1) {
-            await wait(1000);
+            await wait(1500);
           }
         } else {
           errorCount++;
@@ -2700,7 +2810,7 @@
       input = findCommentInput(postElement);
       if (!input) {
         console.log(`[Pajaritos] Input not found yet, attempt ${attempts + 1}/${maxAttempts}`);
-        await wait(300);
+        await wait(450);
         attempts++;
       } else {
         console.log('[Pajaritos] ✅ Input found!');
@@ -2719,7 +2829,7 @@
       // NEVER click the input - it triggers file dialog
       if (progressCallback) progressCallback('Abriendo campo de comentario...');
       input.focus();
-      await wait(500); // Wait for comment box to open
+      await wait(750); // Wait for comment box to open
       
       // Don't click the input - just focus it to avoid triggering file dialog
 
@@ -2735,7 +2845,7 @@
         } else {
           console.log('[Pajaritos] ✅ Image uploaded successfully');
           if (progressCallback) progressCallback('✅ Imagen subida, procesando...');
-          await wait(2000); // Wait for image to process
+          await wait(3000); // Wait for image to process
         }
       } else {
         console.log('[Pajaritos] No image to upload, skipping image upload step');
@@ -2749,7 +2859,7 @@
       } else {
         input.value = '';
       }
-      await wait(200);
+      await wait(300);
 
       // Set the text content
       if (input.contentEditable === 'true') {
@@ -2782,7 +2892,7 @@
         input.dispatchEvent(new Event('change', { bubbles: true }));
       }
 
-      await wait(1000);
+      await wait(1500);
       
       // Find and click the submit button
       if (progressCallback) progressCallback('Publicando comentario...');
@@ -2857,10 +2967,10 @@
 
       if (submitButton) {
         submitButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        await wait(300);
+        await wait(450);
         submitButton.click();
         console.log('[Pajaritos] ✅ Comment posted via submit button');
-        await wait(2000);
+        await wait(3000);
         return { success: true };
       } else {
         // Fallback: try pressing Enter
@@ -2874,7 +2984,7 @@
           cancelable: true
         });
         input.dispatchEvent(enterEvent);
-        await wait(2000);
+        await wait(3000);
         return { success: true };
       }
     } catch (error) {
@@ -2919,7 +3029,7 @@
         
         // Find the "adjunta una foto o un video" button
         // Wait a bit for buttons to appear after focusing
-        await wait(500);
+        await wait(750);
         const photoButtons = inputContainer.querySelectorAll('div[role="button"], span[role="button"], button');
         let photoButton = null;
         
@@ -2945,9 +3055,9 @@
         // Click the photo button - this WILL open the file dialog
         if (progressCallback) progressCallback('Abriendo selector de archivos...');
         photoButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        await wait(200);
+        await wait(300);
         photoButton.click();
-        await wait(1000);
+        await wait(1500);
 
         // Now look for the file input that appeared after clicking
         let attempts = 0;
@@ -2957,7 +3067,7 @@
                      document.querySelector('input[type="file"][accept*="video"]');
           
           if (!fileInput) {
-            await wait(300);
+            await wait(450);
             attempts++;
           }
         }
@@ -3018,6 +3128,33 @@
       }
       return false;
     }
+  }
+
+  // Helper function to check if an element is shared content (image/infographic within a post)
+  function isSharedContent(element) {
+    // Check if it's nested inside another article (shared content is usually nested)
+    const parentArticle = element.closest('div[role="article"]');
+    if (parentArticle && parentArticle !== element) {
+      // Check if the parent article contains a comment input (meaning this is shared content within a post)
+      const parentHasCommentInput = parentArticle.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') !== null ||
+                                    parentArticle.querySelector('div[contenteditable="true"][aria-label*="Responder como"]') !== null ||
+                                    parentArticle.querySelector('div[contenteditable="true"][aria-label*="Comentar como"]') !== null;
+      
+      if (parentHasCommentInput) {
+        // This element is nested inside a post that has a comment input, so it's likely shared content
+        // Check if this element itself doesn't have a comment input
+        const hasOwnCommentInput = element.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') !== null ||
+                                   element.querySelector('div[contenteditable="true"][aria-label*="Responder como"]') !== null ||
+                                   element.querySelector('div[contenteditable="true"][aria-label*="Comentar como"]') !== null;
+        
+        if (!hasOwnCommentInput) {
+          // It's shared content - it's nested in a post but doesn't have its own comment input
+          return true;
+        }
+      }
+    }
+    
+    return false;
   }
 
   // Check if an element is a main post (not a comment)
@@ -3139,9 +3276,9 @@
       }
     }
     
-    // Also check for "Responder como..." but only if it's NOT in a comment reply structure
+    // Also check for "Responder como..." or "Comentar como..." but only if it's NOT in a comment reply structure
     if (!hasMainPostInput) {
-      const responderInputs = element.querySelectorAll('div[contenteditable="true"][aria-label*="Responder como"], div[contenteditable="true"][aria-placeholder*="Responder como"]');
+      const responderInputs = element.querySelectorAll('div[contenteditable="true"][aria-label*="Responder como"], div[contenteditable="true"][aria-placeholder*="Responder como"], div[contenteditable="true"][aria-label*="Comentar como"], div[contenteditable="true"][aria-placeholder*="Comentar como"]');
       for (const input of responderInputs) {
         // Check if it's in a comment reply structure
         const isInReply = input.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== input &&
@@ -3430,9 +3567,9 @@
                           document.querySelector('div[contenteditable="true"][aria-label*="Escribe un comentario"]') ||
                           document.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') ||
                           document.querySelector('div[contenteditable="true"][aria-placeholder*="comentario público"]') ||
-                          // Check for "Responder como..." but only if it's NOT in a comment reply structure
+                          // Check for "Responder como..." or "Comentar como..." but only if it's NOT in a comment reply structure
                           (() => {
-                            const responderInputs = document.querySelectorAll('div[contenteditable="true"][aria-label*="Responder como"], div[contenteditable="true"][aria-placeholder*="Responder como"]');
+                            const responderInputs = document.querySelectorAll('div[contenteditable="true"][aria-label*="Responder como"], div[contenteditable="true"][aria-placeholder*="Responder como"], div[contenteditable="true"][aria-label*="Comentar como"], div[contenteditable="true"][aria-placeholder*="Comentar como"]');
                             for (const input of responderInputs) {
                               const isInReply = input.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== input &&
                                                input.closest('div[data-testid*="comment_replies"]') !== null;
@@ -3442,7 +3579,7 @@
                                                          article !== parentArticle && article.contains(parentArticle)
                                                        );
                               if (!isInReply && !isNestedInComment) {
-                                console.log('[Pajaritos] ✅ Found "Responder como..." input that is NOT in a comment reply structure - treating as main post input');
+                                console.log('[Pajaritos] ✅ Found "Responder como..." or "Comentar como..." input that is NOT in a comment reply structure - treating as main post input');
                                 return input;
                               }
                             }
@@ -3471,10 +3608,11 @@
           
           // If it's in the modal and not in a reply, it's likely the main input
           const placeholder = input.getAttribute('aria-label') || input.getAttribute('aria-placeholder') || input.getAttribute('placeholder') || '';
-          // "Responder como..." can be main post input if it's NOT in a comment reply structure
+          // "Responder como..." or "Comentar como..." can be main post input if it's NOT in a comment reply structure
           if (placeholder.toLowerCase().includes('escribe') || 
               placeholder.toLowerCase().includes('write') || 
-              placeholder.toLowerCase().includes('responder como')) {
+              placeholder.toLowerCase().includes('responder como') ||
+              placeholder.toLowerCase().includes('comentar como')) {
             mainCommentInput = input;
             console.log('[Pajaritos] ✅ Found input via fallback search:', placeholder.substring(0, 50));
             break;
@@ -3546,7 +3684,8 @@
                              inputLabel.toLowerCase().includes('comentario público') ||
                              inputLabel.toLowerCase().includes('public comment') ||
                              inputLabel.toLowerCase().includes('write a response') ||
-                             inputLabel.toLowerCase().includes('responder como'));
+                             inputLabel.toLowerCase().includes('responder como') ||
+                             inputLabel.toLowerCase().includes('comentar como'));
           
           if (isMainInput) {
             console.log('[Pajaritos] 🎯 Trying new approach: Adding button near main comment input...');
@@ -3803,10 +3942,14 @@
         // Use the searchScope we determined at the start (modal if exists, otherwise document)
         const allPosts = searchScope.querySelectorAll('div[role="article"], div[data-ad-preview="message"], div[data-ad-comet-preview="message"]');
         
+        // Filter out shared content/images
+        const filteredPosts = Array.from(allPosts).filter(post => !isSharedContent(post));
+        console.log(`[Pajaritos] 🔍 Filtered out shared content: ${allPosts.length} -> ${filteredPosts.length} posts`);
+        
         // If we found the comment input earlier, prioritize posts that contain it
         let postsWithInput = [];
         if (mainCommentInput) {
-          postsWithInput = Array.from(allPosts).filter(post => post.contains(mainCommentInput));
+          postsWithInput = filteredPosts.filter(post => post.contains(mainCommentInput));
           if (postsWithInput.length > 0) {
             console.log('[Pajaritos] ✅ Found', postsWithInput.length, 'post(s) containing the comment input');
             postsWithInput.forEach((post, idx) => {
@@ -3819,8 +3962,9 @@
         
         // If we didn't find posts with the input, try the video/main input filter
         if (posts.length === 0) {
-          const postsWithVideo = Array.from(allPosts).filter(post => {
+          const postsWithVideo = filteredPosts.filter(post => {
             if (!isMainPost(post)) return false;
+            if (isSharedContent(post)) return false; // Exclude shared content
             
             // Check if post is visible (not hidden)
             const rect = post.getBoundingClientRect();
@@ -3870,6 +4014,7 @@
             const found = searchScope.querySelectorAll(selector);
             const filtered = Array.from(found).filter(post => {
               if (!isMainPost(post)) return false;
+              if (isSharedContent(post)) return false; // Exclude shared content
               // Check if it has video or is likely the main post
               const hasVideo = post.querySelector('video') !== null;
               const hasMainInput = post.querySelector('div[contenteditable="true"][aria-label*="comentario público"]') !== null;
@@ -3906,6 +4051,7 @@
           const filtered = Array.from(found).filter(post => {
             // First check isMainPost
             if (!isMainPost(post)) return false;
+            if (isSharedContent(post)) return false; // Exclude shared content
             
             // In modals, filter out comments more aggressively
             if (openModal) {
@@ -4053,7 +4199,8 @@
                              inputLabel.toLowerCase().includes('public comment') ||
                              inputLabel.toLowerCase().includes('write a response') ||
                              inputLabel.toLowerCase().includes('write a comment') ||
-                             inputLabel.toLowerCase().includes('responder como'));
+                             inputLabel.toLowerCase().includes('responder como') ||
+                             inputLabel.toLowerCase().includes('comentar como'));
           
           if (isMainInput) {
             console.log('[Pajaritos] ✅ Found comment input in document (last resort), label:', inputLabel.substring(0, 50));
@@ -4216,6 +4363,35 @@
       console.log(`[Pajaritos] 🔍 Processing post ${index + 1}/${postsToProcess.length}...`);
       logPostMetadata(post, `Post ${index + 1} (to process)`);
       
+      // Skip if this is shared content (image/infographic within a post)
+      if (isSharedContent(post)) {
+        console.log(`[Pajaritos] ⏭️ Post ${index + 1}: Skipping - this is shared content/image, not a main post`);
+        return; // Skip this iteration
+      }
+      
+      // CRITICAL: Verify this is actually a main post, not a comment
+      if (!isMainPost(post)) {
+        console.log(`[Pajaritos] ⏭️ Post ${index + 1}: Skipping - this is a comment, not a main post`);
+        return; // Skip this iteration
+      }
+      
+      // Additional check: if this post is nested inside another article, it's likely a comment
+      const parentArticle = post.closest('div[role="article"]');
+      if (parentArticle && parentArticle !== post) {
+        // Check if the parent is also an article - if so, this is nested (likely a comment)
+        const isParentMainPost = isMainPost(parentArticle);
+        if (!isParentMainPost) {
+          console.log(`[Pajaritos] ⏭️ Post ${index + 1}: Skipping - this post is nested inside a comment article`);
+          return; // Skip this iteration
+        }
+        // If parent is a main post, check if this post is actually a comment within it
+        const isInCommentSection = post.closest('[data-testid*="comment"]') !== null ||
+                                   post.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== null;
+        if (isInCommentSection && post !== parentArticle) {
+          console.log(`[Pajaritos] ⏭️ Post ${index + 1}: Skipping - this is in a comment section, not the main post`);
+          return; // Skip this iteration
+        }
+      }
       
       // PRIORITY 1: Check for "Responder como..." input FIRST (this is the preferred location)
       // PRIORITY 2: Fallback to "Comentar" button only if input not found
@@ -4234,50 +4410,131 @@
         post.querySelector('div[contenteditable="true"][aria-placeholder*="Write a comment"]') ||
         post.querySelector('div[contenteditable="true"][placeholder*="Write a comment"]') ||
         // Additional variations for different Facebook UI versions
-        post.querySelector('div[contenteditable="true"][aria-label*="Escribe una respuesta"]') ||
-        post.querySelector('div[contenteditable="true"][aria-label*="Write a response"]') ||
-        post.querySelector('div[contenteditable="true"][data-testid*="comment"]') ||
-        // IMPORTANT: "Responder como..." can be main post input OR comment reply input
+        // IMPORTANT: "Escribe una respuesta" can be main post input OR comment reply input
         // We need to check if it's NOT nested in a comment reply structure
         (() => {
-          const responderInputs = post.querySelectorAll('div[contenteditable="true"][aria-label*="Responder como"], div[contenteditable="true"][aria-placeholder*="Responder como"]');
-          for (const input of responderInputs) {
-            // Check if it's in a comment reply structure (nested inside another comment)
-            const isInReply = input.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== input &&
-                             input.closest('div[data-testid*="comment_replies"]') !== null;
-            // Check if it's nested inside another article (likely a comment)
-            const parentArticle = input.closest('div[role="article"]');
-            const postArticle = post.closest('div[role="article"]') || post;
-            const isNestedInComment = parentArticle && parentArticle !== postArticle && 
-                                     postArticle.contains(parentArticle);
-            
-            // If it's NOT in a reply structure and NOT nested in a comment, it's the main post input
-            if (!isInReply && !isNestedInComment) {
-              console.log(`[Pajaritos] ✅ Post ${index + 1}: Found "Responder como..." input that is NOT in a comment reply structure - treating as main post input`);
-              return input;
+          const respuestaInputs = post.querySelectorAll('div[contenteditable="true"][aria-label*="Escribe una respuesta"], div[contenteditable="true"][aria-placeholder*="Escribe una respuesta"]');
+          for (const input of respuestaInputs) {
+            // Skip if it's "Escribe una respuesta pública" (we don't want buttons there)
+            const label = (input.getAttribute('aria-label') || input.getAttribute('aria-placeholder') || '').toLowerCase();
+            if (label.includes('escribe una respuesta pública')) {
+              continue; // Skip public reply inputs
             }
+            
+            // STRICT CHECK: The input's closest article must be the post itself (not nested)
+            const inputArticle = input.closest('div[role="article"]');
+            const postArticle = post.closest('div[role="article"]') || post;
+            
+            // If the input is in a different article than the post, it's nested (skip it)
+            if (inputArticle && inputArticle !== postArticle) {
+              // Check if the input article is nested inside the post article (it's a comment)
+              if (postArticle.contains(inputArticle) && inputArticle !== postArticle) {
+                console.log(`[Pajaritos] ⏭️ Post ${index + 1}: Skipping "Escribe una respuesta" input - it's in a nested article (comment)`);
+                continue;
+              }
+            }
+            
+            // Check if it's in a comment reply structure
+            const isInReply = input.closest('[data-testid*="comment_replies"]') !== null ||
+                             (input.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== null && 
+                              input.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== input);
+            if (isInReply) {
+              console.log(`[Pajaritos] ⏭️ Post ${index + 1}: Skipping "Escribe una respuesta" input - it's in a reply structure`);
+              continue;
+            }
+            
+            // Check if it's in a comment section (not the main post)
+            const isInCommentSection = input.closest('[data-testid*="comment"]') !== null &&
+                                      input.closest('[data-testid*="comment"]') !== post;
+            if (isInCommentSection) {
+              console.log(`[Pajaritos] ⏭️ Post ${index + 1}: Skipping "Escribe una respuesta" input - it's in a comment section`);
+              continue;
+            }
+            
+            // If we get here, it's likely the main post input
+            console.log(`[Pajaritos] ✅ Post ${index + 1}: Found "Escribe una respuesta" input that is NOT in a comment reply structure - treating as main post input`);
+            return input;
           }
           return null;
         })() ||
-        // Fallback: any contenteditable that's not in a reply structure
+        post.querySelector('div[contenteditable="true"][aria-label*="Write a response"]') ||
+        post.querySelector('div[contenteditable="true"][data-testid*="comment"]') ||
+        // IMPORTANT: "Responder como..." or "Comentar como..." can be main post input OR comment reply input
+        // We need to check if it's NOT nested in a comment reply structure
+        (() => {
+          const responderInputs = post.querySelectorAll('div[contenteditable="true"][aria-label*="Responder como"], div[contenteditable="true"][aria-placeholder*="Responder como"], div[contenteditable="true"][aria-label*="Comentar como"], div[contenteditable="true"][aria-placeholder*="Comentar como"]');
+          for (const input of responderInputs) {
+            // STRICT CHECK: The input's closest article must be the post itself (not nested)
+            const inputArticle = input.closest('div[role="article"]');
+            const postArticle = post.closest('div[role="article"]') || post;
+            
+            // If the input is in a different article than the post, it's nested (skip it)
+            if (inputArticle && inputArticle !== postArticle) {
+              // Check if the input article is nested inside the post article (it's a comment)
+              if (postArticle.contains(inputArticle) && inputArticle !== postArticle) {
+                console.log(`[Pajaritos] ⏭️ Post ${index + 1}: Skipping "Responder como..." input - it's in a nested article (comment)`);
+                continue;
+              }
+            }
+            
+            // Check if it's in a comment reply structure (nested inside another comment)
+            const isInReply = input.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== input &&
+                             input.closest('div[data-testid*="comment_replies"]') !== null;
+            if (isInReply) {
+              console.log(`[Pajaritos] ⏭️ Post ${index + 1}: Skipping "Responder como..." input - it's in a reply structure`);
+              continue;
+            }
+            
+            // Check if it's in a comment section (not the main post)
+            const isInCommentSection = input.closest('[data-testid*="comment"]') !== null &&
+                                      input.closest('[data-testid*="comment"]') !== post;
+            if (isInCommentSection) {
+              console.log(`[Pajaritos] ⏭️ Post ${index + 1}: Skipping "Responder como..." input - it's in a comment section`);
+              continue;
+            }
+            
+            // If we get here, it's likely the main post input
+            console.log(`[Pajaritos] ✅ Post ${index + 1}: Found "Responder como..." or "Comentar como..." input that is NOT in a comment reply structure - treating as main post input`);
+            return input;
+          }
+          return null;
+        })() ||
+        // Fallback: any contenteditable that's not in a reply structure (STRICT CHECK)
         (() => {
           const allInputs = post.querySelectorAll('div[contenteditable="true"]');
           for (const input of allInputs) {
+            // STRICT CHECK: The input's closest article must be the post itself (not nested)
+            const inputArticle = input.closest('div[role="article"]');
+            const postArticle = post.closest('div[role="article"]') || post;
+            
+            // If the input is in a different article than the post, it's nested (skip it)
+            if (inputArticle && inputArticle !== postArticle) {
+              // Check if the input article is nested inside the post article (it's a comment)
+              if (postArticle.contains(inputArticle) && inputArticle !== postArticle) {
+                continue; // Skip nested inputs
+              }
+            }
+            
             // Skip if it's in a reply structure
             const isInReply = input.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== input &&
                              input.closest('div[data-testid*="comment_replies"]') !== null;
             if (isInReply) continue;
             
+            // Skip if it's in a comment section
+            const isInCommentSection = input.closest('[data-testid*="comment"]') !== null &&
+                                      input.closest('[data-testid*="comment"]') !== post;
+            if (isInCommentSection) continue;
+            
             // Check if it has a placeholder that suggests it's a main comment input
             const label = (input.getAttribute('aria-label') || 
                           input.getAttribute('aria-placeholder') || 
                           input.getAttribute('placeholder') || '').toLowerCase();
-            if (label.includes('escribe') || label.includes('write') || label.includes('comentario') || label.includes('comment') || label.includes('responder como')) {
-              // Double-check it's not nested in a comment
+            if (label.includes('escribe') || label.includes('write') || label.includes('comentario') || label.includes('comment') || label.includes('responder como') || label.includes('comentar como')) {
+              // Final check: ensure it's not nested in a comment
               const parentArticle = input.closest('div[role="article"]');
-              const postArticle = post.closest('div[role="article"]') || post;
-              const isNestedInComment = parentArticle && parentArticle !== postArticle && 
-                                       postArticle.contains(parentArticle);
+              const postArticle2 = post.closest('div[role="article"]') || post;
+              const isNestedInComment = parentArticle && parentArticle !== postArticle2 && 
+                                       postArticle2.contains(parentArticle);
               if (!isNestedInComment) {
                 return input;
               }
@@ -4480,14 +4737,14 @@
       
       // Check if we have a main input in this post - use it FIRST
       if (mainInputInPost && hasMainInput) {
-        console.log(`[Pajaritos] 🎯 Post ${index + 1}: Found "Responder como..." input - using it as FIRST option`);
+        console.log(`[Pajaritos] 🎯 Post ${index + 1}: Found "Responder como..." or "Comentar como..." input - using it as FIRST option`);
         const inputLabel = mainInputInPost.getAttribute('aria-label') || 
                           mainInputInPost.getAttribute('aria-placeholder') || '';
-        if (inputLabel.toLowerCase().includes('responder como')) {
+        if (inputLabel.toLowerCase().includes('responder como') || inputLabel.toLowerCase().includes('comentar como')) {
           // Use addButtonNearCommentInput to place button right next to input
           buttonAdded = addButtonNearCommentInput(mainInputInPost);
           if (buttonAdded) {
-            console.log(`[Pajaritos] ✅ Post ${index + 1}: Button added next to "Responder como..." input (PRIORITY 1)`);
+            console.log(`[Pajaritos] ✅ Post ${index + 1}: Button added next to "Responder como..." or "Comentar como..." input (PRIORITY 1)`);
             // Mark post as processed
             post.dataset.pajaritosProcessed = 'true';
             return; // Skip the rest - we're done with this post
@@ -4516,21 +4773,25 @@
           });
         } else {
           console.log(`[Pajaritos] ✅ Post ${index + 1}: createReplyButton returned true - button should be created`);
-          // Verify button was actually added - check in post and parent containers
-          setTimeout(() => {
+          // Verify button was actually added - check immediately and with retries
+          const verifyButton = (attempt = 1, maxAttempts = 3) => {
             // Search more broadly - button might be in parent containers
             let addedBtn = post.querySelector('.pajaritos-reply-btn');
             if (!addedBtn) {
               // Check parent elements (button might be inserted in parent)
               let parent = post.parentElement;
               let levels = 0;
-              while (parent && levels < 3 && !addedBtn) {
+              while (parent && levels < 5 && !addedBtn) {
                 addedBtn = parent.querySelector('.pajaritos-reply-btn');
                 if (addedBtn) {
                   // Verify it's related to this post (check if post contains the button's container)
                   const btnContainer = addedBtn.closest('div[role="article"]') || 
                                       addedBtn.closest('div[data-ad-preview="message"]');
-                  if (btnContainer && (btnContainer === post || post.contains(btnContainer))) {
+                  const postRect = post.getBoundingClientRect();
+                  const btnRect = addedBtn.getBoundingClientRect();
+                  const distance = Math.abs(btnRect.top - postRect.bottom);
+                  // If button is within 500px of the post, consider it related
+                  if (btnContainer && (btnContainer === post || post.contains(btnContainer)) || distance < 500) {
                     break; // Found it
                   } else {
                     addedBtn = null; // Not related to this post
@@ -4548,8 +4809,8 @@
               for (const btn of allButtons) {
                 const btnRect = btn.getBoundingClientRect();
                 const distance = Math.abs(btnRect.top - postRect.bottom);
-                // If button is within 300px of the post, consider it related
-                if (distance < 300 && Math.abs(btnRect.left - postRect.left) < 500) {
+                // If button is within 500px of the post, consider it related
+                if (distance < 500 && Math.abs(btnRect.left - postRect.left) < 500) {
                   addedBtn = btn;
                   console.log(`[Pajaritos] ✅ Post ${index + 1}: Found button in nearby container (distance: ${Math.round(distance)}px)`);
                   break;
@@ -4560,9 +4821,15 @@
             if (addedBtn) {
               const btnRect = addedBtn.getBoundingClientRect();
               console.log(`[Pajaritos] ✅ Post ${index + 1}: Button verified in DOM at position (${Math.round(btnRect.left)}, ${Math.round(btnRect.top)})`);
+              return true;
+            } else if (attempt < maxAttempts) {
+              // Retry after a short delay - Facebook might be still updating the DOM
+              setTimeout(() => verifyButton(attempt + 1, maxAttempts), 200 * attempt);
+              return false;
             } else {
-              console.error(`[Pajaritos] ❌ Post ${index + 1}: Button NOT found in DOM after createReplyButton returned true!`);
-              console.error(`[Pajaritos] 🔍 Debug: Post element:`, {
+              // Final attempt failed
+              console.warn(`[Pajaritos] ⚠️ Post ${index + 1}: Button not found after ${maxAttempts} attempts. This may be normal if Facebook's DOM was updated.`);
+              console.log(`[Pajaritos] 🔍 Debug: Post element:`, {
                 tagName: post.tagName,
                 className: post.className?.substring(0, 50),
                 hasChildren: post.children.length,
@@ -4570,9 +4837,14 @@
               });
               // Check if button exists anywhere in document
               const allButtons = document.querySelectorAll('.pajaritos-reply-btn');
-              console.error(`[Pajaritos] 🔍 Debug: Found ${allButtons.length} button(s) total in document`);
+              console.log(`[Pajaritos] 🔍 Debug: Found ${allButtons.length} button(s) total in document`);
+              // Don't treat this as a critical error - Facebook's dynamic DOM might have removed it
+              return false;
             }
-          }, 300); // Increased delay to 300ms
+          };
+          
+          // Start verification immediately and with retries
+          verifyButton();
         }
       } else {
         console.log(`[Pajaritos] ℹ️ Post ${index + 1}: Button already exists on this post`);

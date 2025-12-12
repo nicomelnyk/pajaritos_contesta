@@ -44,11 +44,6 @@ var REPLY_OPTION_INSECTIVORO_NETO = {
       id: 'insectivoro_neto_pichon_8',
       text: '❗Tips Generales:\n\n🌱NO HUMANIZAR. No tenerlos a upa, hablarle, tenerlo en el hombro, acariciarlo. Solo darle de comer y mantener su higiene. Si se humaniza no podrá ser liberable.\n\n🌱Cuidado con los escapes\n\n🌱Recordar bajar la tapa del inodoro y sacar baldes de agua ya que si cae se puede ahogar.\n\n🌱SI dejarle plato de agua para que se bañe y beba si tiene ganas\n\n🌱NO bañarlo ni mojarlo porque le podemos causar hipotermia.\n\n🌱Cuidado con objetos pequeños que puedan ingerir (arito, lentejuela, bandita elástica, etc)\n\n🌱Aves NUNCA junto a gatos o perros\n\n🌱Sólamente darle la alimentación indicada.\n\nAlimentos prohibidos:\n\n• NO dar Leche (NO son mamíferos)\n\n• NO dar agua sola con jeringa ni cucharita porque lo podemos ahogar',
       image: null
-    },
-    {
-      id: 'insectivoro_neto_pichon_9',
-      text: 'Si estas a fines de Febrero y no llegaste a liberarla contactate con nosotros, sea para un apto o consejo de liberación (Chequeamos mediante BirdWaching por donde están los grupos de golondrinas preparándose para emprender la migración) o porque es discapacitada o no termino de crecer y no esta volando o para que te aconsejemos como cuidarlo durante el invierno, ya que NO soportan temperaturas inferiores a 20°C)',
-      image: 'insectivoro/golondrina_migracion.png'
     }
     ]
   },
@@ -99,11 +94,6 @@ var REPLY_OPTION_INSECTIVORO_NETO = {
       id: 'insectivoro_neto_juvenil_9',
       text: '❗Tips Generales:\n\n🌱NO HUMANIZAR. No tenerlos a upa, hablarle, tenerlo en el hombro, acariciarlo. Solo darle de comer y mantener su higiene. Si se humaniza no podrá ser liberable.\n\n🌱Cuidado con los escapes\n\n🌱Recordar bajar la tapa del inodoro y sacar baldes de agua ya que si cae se puede ahogar.\n\n🌱SI dejarle plato de agua para que se bañe y beba si tiene ganas\n\n🌱NO bañarlo ni mojarlo porque le podemos causar hipotermia.\n\n🌱Cuidado con objetos pequeños que puedan ingerir (arito, lentejuela, bandita elástica, etc)\n\n🌱Aves NUNCA junto a gatos o perros\n\n🌱Sólamente darle la alimentación indicada.\n\nAlimentos prohibidos:\n\n• NO dar Leche (NO son mamíferos)\n\n• NO dar agua sola con jeringa ni cucharita porque lo podemos ahogar',
       image: null
-    },
-    {
-      id: 'insectivoro_neto_juvenil_10',
-      text: 'Si estas a fines de Febrero y no llegaste a liberarla contactate con nosotros, sea para un apto o consejo de liberación (Chequeamos mediante BirdWaching por donde están los grupos de golondrinas preparándose para emprender la migración) o porque es discapacitada o no termino de crecer y no esta volando o para que te aconsejemos como cuidarlo durante el invierno, ya que NO soportan temperaturas inferiores a 20°C)',
-      image: 'insectivoro/golondrina_migracion.png'
     }
     ]
   },
@@ -144,11 +134,6 @@ var REPLY_OPTION_INSECTIVORO_NETO = {
       id: 'insectivoro_neto_adulto_7',
       text: 'Mientras tanto te paso sus cuidados, ponela en alguna cajita donde pueda estar segura y tranquila, te paso un ejemplo',
       image: 'caja_jaula.png'
-    },
-    {
-      id: 'insectivoro_neto_adulto_8',
-      text: 'Si estas a fines de Febrero y no llegaste a liberarla contactate con nosotros, sea para un apto o consejo de liberación (Chequeamos mediante BirdWaching por donde están los grupos de golondrinas preparándose para emprender la migración) o porque es discapacitada o no termino de crecer y no esta volando o para que te aconsejemos como cuidarlo durante el invierno, ya que NO soportan temperaturas inferiores a 20°C)',
-      image: 'insectivoro/golondrina_migracion.png'
     }
     ]
   }

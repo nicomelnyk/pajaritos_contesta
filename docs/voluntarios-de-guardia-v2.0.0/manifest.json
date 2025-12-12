@@ -1,0 +1,87 @@
+{
+  "manifest_version": 3,
+  "name": "Voluntarios de Guardia",
+  "version": "2.0.0",
+  "description": "Herramienta de asistencia para responder publicaciones de Facebook con respuestas predefinidas sobre cuidado de aves",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://www.facebook.com/*",
+    "https://m.facebook.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.facebook.com/*",
+        "https://m.facebook.com/*"
+      ],
+      "js": [
+        "config/helper.js",
+        "config/acuaticas.js",
+        "config/anilladas.js",
+        "config/atajacaminos.js",
+        "config/benteveo.js",
+        "config/bigua.js",
+        "config/calandria.js",
+        "config/carpintero.js",
+        "config/colibri.js",
+        "config/control_natalidad.js",
+        "config/gallareta.js",
+        "config/gallineta.js",
+        "config/garza.js",
+        "config/golondrina.js",
+        "config/gorrion.js",
+        "config/gusanos.js",
+        "config/huevos.js",
+        "config/insectivoro_neto.js",
+        "config/lechuza.js",
+        "config/mirasol.js",
+        "config/ninfas.js",
+        "config/paloma.js",
+        "config/paramixovirus.js",
+        "config/picazuro.js",
+        "config/picui.js",
+        "config/primeros_auxilios.js",
+        "config/psitasidos.js",
+        "config/rapaces.js",
+        "config/recien_nacido.js",
+        "config/repunte.js",
+        "config/sos.js",
+        "config/teros.js",
+        "config/torcaza.js",
+        "config/tordo.js",
+        "config/viruela.js",
+        "config/zorzal.js",
+        "config.js",
+        "content.js"
+      ],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["images/*", "images/**/*"],
+      "matches": ["https://www.facebook.com/*", "https://m.facebook.com/*"]
+    }
+  ]
+}
+
