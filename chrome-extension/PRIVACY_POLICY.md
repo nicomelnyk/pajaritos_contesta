@@ -1,7 +1,5 @@
 # Política de Privacidad - Voluntarios de Guardia
 
-**Última actualización:** [Fecha]
-
 ## Información que Recopilamos
 
 Esta extensión de Chrome almacena localmente en tu navegador:
