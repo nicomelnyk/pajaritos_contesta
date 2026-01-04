@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0CNJ+74t4I04IhEsE6BP7KOBb+lgaPfwGnHBDQLdVb2lgAdbS3QMERvF9lu/vIWVJIeUpicBlw5WuQ79jEgBioAxCHLYpcg66bHWtSZGGLqdYlNRI/2Z9vUbfDIuf9hqfYib6uO9uu0c3LQB9DyWJqLNlNEOzVUCDEVXODlpfHz0L00Raco/nApSs1XM87tHqRvJsnkaXNaUwIzuX81Mi7zKo0ATZ6vZCa/0daojV48uGhzF/TMUHSYU2mRALdM9y1HVfseyaICd+JaDXUQ+m/7EeluIp4kC/wWkfwTaYNUQvbtw7ZgJtdIIngpll+/Ebd2TyXUt7o791Itx+faO5wIDAQAB",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtwT3F5GdsHgkLGPuxSyntf+5cvs/lhvCC6C2rnVKtz9XWXZW19ZiiufvKC0Z2L7svANWV0/e09xyPRfp5UkybBEecwiiuXO+GI410xPoQUl/X/nXX+4DQYxGS3/cACZ8L/yl1JPZ2+2el5y1qm2TsQEsvnmuNwf6eU11jSghTnkWpf9dEJp4e4cStmylzHCmNVKMIyWEJ0k/NBdExeZERWgKAA6G3sR3hpl6G+KJBxut5bNJXTKh+9f+TUg76XE+od0dp96GnQj0z6+cB3QzuZF6parWnMo2y1OWbWHkwJz5rR9gOpE3h5WJt5ioxTxpfW/QJ9voQ7/PqukNoUGAFwIDAQAB",
   "name": "Voluntarios de Guardia",
   "version": "3.0.0",
   "description": "Herramienta de asistencia para responder publicaciones de Facebook con respuestas predefinidas sobre cuidado de aves",
