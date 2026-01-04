@@ -1,7 +1,7 @@
 // Background service worker for Chrome extension
 
 // Storage version to track migrations
-const STORAGE_VERSION = '2.1.1';
+const STORAGE_VERSION = '3.0.1';
 
 // Migration function to preserve data across reinstalls
 async function migrateStorageData() {
@@ -38,6 +38,13 @@ async function migrateStorageData() {
     if (allData.commentHistory) {
       preservedData.commentHistory = allData.commentHistory;
     }
+    
+    // Preserve any other pajaritos-related keys
+    Object.keys(allData).forEach(key => {
+      if (key.startsWith('pajaritos_') && !preservedData.hasOwnProperty(key)) {
+        preservedData[key] = allData[key];
+      }
+    });
     
     // Update storage version
     preservedData.pajaritos_storage_version = STORAGE_VERSION;
