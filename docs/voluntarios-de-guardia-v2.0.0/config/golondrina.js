@@ -22,7 +22,7 @@ var REPLY_OPTION_GOLONDRINA = {
     },
     {
       id: 'golondrina_pichon_4',
-      text: 'Se las puede alimentar en principio con BALANCEADO DE AVE O PERRO remojado. Pero esto es solo para salir del apuro, debemos incorporar insectos en el mediano plazo.',
+      text: 'Se las puede alimentar en principio con BALANCEADO DE PERRO O GATO PREMIUM remojado. Pero esto es solo para salir del apuro, debemos incorporar insectos en el mediano plazo.',
       image: 'insectivoro/alimento_gato.png'
     },
     {
@@ -72,7 +72,7 @@ var REPLY_OPTION_GOLONDRINA = {
     },
     {
       id: 'golondrina_juvenil_4',
-      text: 'Se las puede alimentar en principio con BALANCEADO DE AVE O PERRO remojado. Pero esto es solo para salir del apuro, debemos incorporar insectos en el mediano plazo.',
+      text: 'Se las puede alimentar en principio con BALANCEADO DE PERRO O GATO PREMIUM remojado. Pero esto es solo para salir del apuro, debemos incorporar insectos en el mediano plazo.',
       image: 'insectivoro/alimento_gato.png'
     },
     {
@@ -127,7 +127,7 @@ var REPLY_OPTION_GOLONDRINA = {
     },
     {
       id: 'golondrina_adulto_4',
-      text: 'Se las puede alimentar en principio con BALANCEADO DE AVE O PERRO remojado. Pero esto es solo para salir del apuro, debemos incorporar insectos en el mediano plazo.',
+      text: 'Se las puede alimentar en principio con BALANCEADO DE PERRO O GATO PREMIUM remojado. Pero esto es solo para salir del apuro, debemos incorporar insectos en el mediano plazo.',
       image: 'insectivoro/alimento_gato.png'
     },
     {

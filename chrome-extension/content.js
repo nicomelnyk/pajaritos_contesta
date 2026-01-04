@@ -8,6 +8,68 @@
   // Helper function to wait
   const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+  // Helper function to check if extension context is still valid
+  function isExtensionContextValid() {
+    try {
+      // Try to access chrome.runtime - if it throws, context is invalid
+      return typeof chrome !== 'undefined' && 
+             typeof chrome.runtime !== 'undefined' && 
+             typeof chrome.runtime.getURL === 'function';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Safe wrapper for chrome.runtime.getURL with fallback
+  function safeGetExtensionURL(path) {
+    try {
+      if (isExtensionContextValid()) {
+        return chrome.runtime.getURL(path);
+      }
+    } catch (e) {
+      console.warn('[Pajaritos] ⚠️ Extension context invalidated, using fallback for:', path);
+    }
+    // Fallback: return a data URI or empty string
+    // For images, we could use a placeholder or skip the image
+    return '';
+  }
+
+  // Safe wrapper for chrome.storage.local operations
+  async function safeStorageSet(items) {
+    try {
+      if (isExtensionContextValid()) {
+        await chrome.storage.local.set(items);
+        return { success: true };
+      } else {
+        console.warn('[Pajaritos] ⚠️ Extension context invalidated, cannot save to storage');
+        return { success: false, error: 'Extension context invalidated' };
+      }
+    } catch (error) {
+      if (error.message && error.message.includes('Extension context invalidated')) {
+        console.warn('[Pajaritos] ⚠️ Extension context invalidated during storage operation');
+        return { success: false, error: 'Extension context invalidated' };
+      }
+      throw error; // Re-throw other errors
+    }
+  }
+
+  async function safeStorageGet(keys) {
+    try {
+      if (isExtensionContextValid()) {
+        return await chrome.storage.local.get(keys);
+      } else {
+        console.warn('[Pajaritos] ⚠️ Extension context invalidated, cannot read from storage');
+        return {};
+      }
+    } catch (error) {
+      if (error.message && error.message.includes('Extension context invalidated')) {
+        console.warn('[Pajaritos] ⚠️ Extension context invalidated during storage read');
+        return {};
+      }
+      throw error; // Re-throw other errors
+    }
+  }
+
   // Find comment button for a post
   function findCommentButton(postElement) {
     // Looking for comment button in post
@@ -736,7 +798,7 @@
     // Create button
     const replyBtn = document.createElement('div');
     replyBtn.className = 'pajaritos-reply-btn';
-    const iconUrl = chrome.runtime.getURL('icon48.png');
+    const iconUrl = safeGetExtensionURL('icon48.png');
     replyBtn.innerHTML = `<img src="${iconUrl}" alt="🐦" style="width: 28px; height: 28px; display: block;" />`;
     replyBtn.style.cssText = `
       display: inline-flex;
@@ -931,7 +993,7 @@
     // Create and insert the button
     const replyBtn = document.createElement('div');
     replyBtn.className = 'pajaritos-reply-btn';
-    const iconUrl = chrome.runtime.getURL('icon48.png');
+    const iconUrl = safeGetExtensionURL('icon48.png');
     replyBtn.innerHTML = `<img src="${iconUrl}" alt="🐦" style="width: 30px; height: 30px; display: block;" />`;
     replyBtn.style.cssText = `
       display: inline-flex;
@@ -1174,7 +1236,7 @@
     // Create button
     const replyBtn = document.createElement('div');
     replyBtn.className = 'pajaritos-reply-btn';
-    const iconUrl = chrome.runtime.getURL('icon48.png');
+    const iconUrl = safeGetExtensionURL('icon48.png');
     replyBtn.innerHTML = `<img src="${iconUrl}" alt="🐦" style="width: 28px; height: 28px; display: block;" />`;
     replyBtn.style.cssText = `
       display: inline-flex;
@@ -1407,7 +1469,7 @@
       " onmouseover="this.style.backgroundColor='#e4e6eb'" onmouseout="this.style.backgroundColor='#f0f2f5'" title="Cerrar">×</button>
       
       <h2 style="margin: 0 0 20px 0; color: #1877f2; font-size: 20px; display: flex; align-items: center; gap: 8px;">
-        <img src="${chrome.runtime.getURL('icon48.png')}" alt="🐦" style="width: 24px; height: 24px; display: block;" />
+        <img src="${safeGetExtensionURL('icon48.png')}" alt="🐦" style="width: 24px; height: 24px; display: block;" onerror="this.style.display='none'" />
         Voluntarios de Guardia
       </h2>
       
@@ -1575,10 +1637,6 @@
       const storageKey = getStorageKey();
       if (!storageKey) return;
       
-      const replyInputs = repliesContainer.querySelectorAll('.pajaritos-reply-input');
-      const replyCheckboxes = repliesContainer.querySelectorAll('.pajaritos-reply-checkbox');
-      const imagePreviews = repliesContainer.querySelectorAll('.pajaritos-image-preview');
-      
       const formData = {
         texts: {}, // Legacy: by index (for backward compatibility)
         checkboxes: {}, // Legacy: by index
@@ -1588,150 +1646,290 @@
         checkboxesById: {}, // New: by comment ID
         imagesById: {}, // New: by comment ID
         imagesRemovedById: {}, // New: by comment ID
-        additionalComments: [] // Store additional custom comments
+        additionalComments: [] // Store additional custom comments (in DOM order)
       };
       
       const currentReplies = getCurrentReplies();
-      const baseCommentCount = currentReplies ? currentReplies.length : 0;
       const additionalCommentsArray = [];
       
-      replyInputs.forEach(input => {
-        const index = parseInt(input.dataset.index);
-        const isCustom = input.dataset.custom === 'true';
+      // Process all reply items in DOM order (preserves current visual order)
+      const allReplyItems = repliesContainer.querySelectorAll('.pajaritos-reply-item');
+      
+      allReplyItems.forEach((item, visualIndex) => {
+        const commentId = item.dataset.commentId;
+        const isCustom = item.dataset.custom === 'true';
         
-        // If it's a custom comment (beyond base comments), save to additionalComments
-        if (isCustom && index >= baseCommentCount) {
-          const checkbox = repliesContainer.querySelector(`.pajaritos-reply-checkbox[data-index="${index}"]`);
-          const preview = repliesContainer.querySelector(`.pajaritos-image-preview[data-index="${index}"]`);
-          const imageRemoved = input.dataset.imageRemoved === 'true';
+        const input = item.querySelector('.pajaritos-reply-input');
+        const checkbox = item.querySelector('.pajaritos-reply-checkbox');
+        const preview = item.querySelector('.pajaritos-image-preview');
+        
+        if (!input) return;
+        
+        const currentText = input.value || '';
+        const isChecked = checkbox ? checkbox.checked : true;
+        const imageRemoved = input.dataset.imageRemoved === 'true';
+        
+        // Get image from preview
+        const customImage = preview ? (preview.dataset.customImage || preview.dataset.imageUrl || 
+          (preview.src && preview.src.startsWith('data:image') ? preview.src : null)) : null;
+        const hasValidImage = customImage && customImage.trim() !== '' && !imageRemoved && customImage.startsWith('data:image');
+        
+        if (isCustom) {
+          // Custom comment - save to additionalComments array (in DOM order)
+          const customCommentData = {
+            id: commentId,
+            text: currentText,
+            checked: isChecked,
+            image: hasValidImage ? customImage : null,
+            imageRemoved: imageRemoved
+          };
+          additionalCommentsArray.push(customCommentData);
           
-          // Get or generate unique ID for this custom comment
-          let commentId = input.dataset.commentId;
-          if (!commentId) {
-            // Generate new ID if missing (for backward compatibility)
-            commentId = generateCustomCommentId();
-            input.dataset.commentId = commentId;
-          }
-          
-          // Also save by ID in the new system (for consistency)
-          const currentText = input.value;
+          // Also save by ID for quick lookup
           formData.textsById[commentId] = currentText;
-          if (checkbox) {
-            formData.checkboxesById[commentId] = checkbox.checked;
-          }
-          if (preview && preview.dataset.customImage && !imageRemoved) {
-            formData.imagesById[commentId] = preview.dataset.customImage;
+          formData.checkboxesById[commentId] = isChecked;
+          if (hasValidImage) {
+            formData.imagesById[commentId] = customImage;
           }
           if (imageRemoved) {
             formData.imagesRemovedById[commentId] = true;
           }
           
-          const additionalIndex = index - baseCommentCount;
-          
-          // Ensure array is large enough
-          while (additionalCommentsArray.length <= additionalIndex) {
-            additionalCommentsArray.push(null);
+          console.log('[Pajaritos] Saving custom comment:', { commentId, textLength: currentText.length, visualIndex });
+        } else {
+          // Base comment - save by ID and by original index for backward compatibility
+          // Find the original index in config by matching ID
+          let originalIndex = visualIndex;
+          if (currentReplies && commentId) {
+            const foundIndex = currentReplies.findIndex(r => (r.id || `index_${currentReplies.indexOf(r)}`) === commentId);
+            if (foundIndex !== -1) {
+              originalIndex = foundIndex;
+            }
           }
           
-          additionalCommentsArray[additionalIndex] = {
-            id: commentId, // Store unique ID for custom comments
-            text: currentText,
-            checked: checkbox ? checkbox.checked : true,
-            image: (preview && preview.dataset.customImage && !imageRemoved) ? preview.dataset.customImage : null,
-            imageRemoved: imageRemoved
-          };
-        } else {
-          // Regular comment - save by ID if available, otherwise by index
-          const commentId = input.dataset.commentId;
-          const currentText = input.value;
-          
-          // Get the original text from config to check if it was edited
-          const currentReplies = getCurrentReplies();
-          const reply = currentReplies && currentReplies[index];
+          // Get original text from config to check if edited
+          const reply = currentReplies && currentReplies[originalIndex];
           const originalText = reply ? reply.text : '';
           const wasEdited = currentText !== originalText;
           
-          // Save by ID (new system)
+          // Save by ID (new system) - only if edited
+          if (commentId && wasEdited) {
+            formData.textsById[commentId] = currentText;
+          }
+          // Also save by original index for backward compatibility
+          formData.texts[originalIndex] = currentText;
+          
+          // Save checkbox by ID and original index
           if (commentId) {
-            // Only save if text was edited (different from config)
-            if (wasEdited) {
-              formData.textsById[commentId] = currentText;
+            formData.checkboxesById[commentId] = isChecked;
+          }
+          formData.checkboxes[originalIndex] = isChecked;
+          
+          // Save custom image if present
+          if (hasValidImage) {
+            if (commentId) {
+              formData.imagesById[commentId] = customImage;
             }
-            // Also save by index for backward compatibility
-            formData.texts[index] = currentText;
-          } else {
-            // Fallback to index-based saving (old system)
-            formData.texts[index] = currentText;
+            formData.images[originalIndex] = customImage;
           }
           
           // Track if image was removed
-          if (input.dataset.imageRemoved === 'true') {
+          if (imageRemoved) {
             if (commentId) {
               formData.imagesRemovedById[commentId] = true;
             }
-            formData.imagesRemoved[index] = true;
+            formData.imagesRemoved[originalIndex] = true;
           }
         }
       });
       
-      // Filter out null entries and assign to formData
-      formData.additionalComments = additionalCommentsArray.filter(c => c !== null);
+      // Store custom comments in DOM order
+      formData.additionalComments = additionalCommentsArray;
       
-      replyCheckboxes.forEach(checkbox => {
-        const index = parseInt(checkbox.dataset.index);
-        const isCustom = checkbox.dataset.custom === 'true';
-        const commentId = checkbox.dataset.commentId;
-        
-        // Only save checkbox state for non-custom comments here (custom ones saved above)
-        if (!isCustom || index < baseCommentCount) {
-          // Save by ID (new system)
-          if (commentId) {
-            formData.checkboxesById[commentId] = checkbox.checked;
-          }
-          // Also save by index for backward compatibility
-          formData.checkboxes[index] = checkbox.checked;
-        }
-      });
-
-      // Save custom images (base64) for regular comments only
-      imagePreviews.forEach(preview => {
-        const index = parseInt(preview.dataset.index);
-        const isCustom = preview.dataset.custom === 'true';
-        
-        // Only save for regular comments (custom ones saved above)
-        if (!isCustom || index < baseCommentCount) {
-          const customImage = preview.dataset.customImage;
-          if (customImage && customImage !== '') {
-            const input = repliesContainer.querySelector(`.pajaritos-reply-input[data-index="${index}"]`);
-            const commentId = input ? input.dataset.commentId : null;
-            // Save by ID (new system)
-            if (commentId) {
-              formData.imagesById[commentId] = customImage; // base64 data
+      // Save the current order of replies
+      const allItems = Array.from(repliesContainer.querySelectorAll('.pajaritos-reply-item'));
+      const order = allItems.map(item => {
+        return item.dataset.commentId || null;
+      }).filter(id => id !== null);
+      formData.order = order;
+      
+      // Estimate storage size (rough calculation)
+      const formDataString = JSON.stringify(formData);
+      const estimatedSize = new Blob([formDataString]).size;
+      const maxSize = 9 * 1024 * 1024; // 9MB (leave 1MB buffer from 10MB limit)
+      
+      if (estimatedSize > maxSize) {
+        console.warn('[Pajaritos] ⚠️ Form data is too large:', (estimatedSize / 1024 / 1024).toFixed(2), 'MB');
+        // Try to clean up old form data
+        try {
+          const allData = await safeStorageGet(null);
+          const formDataKeys = Object.keys(allData).filter(key => key.startsWith('pajaritos_form_') && key !== `pajaritos_form_${storageKey}`);
+          
+          if (formDataKeys.length > 0) {
+            // Remove oldest form data entries (keep only the 5 most recent)
+            const keysToRemove = formDataKeys.slice(0, Math.max(0, formDataKeys.length - 5));
+            if (isExtensionContextValid()) {
+              await chrome.storage.local.remove(keysToRemove);
             }
-            // Also save by index for backward compatibility
-            formData.images[index] = customImage; // base64 data
+            console.log('[Pajaritos] 🧹 Cleaned up', keysToRemove.length, 'old form data entries');
+            
+            // Recalculate size after cleanup
+            const newFormDataString = JSON.stringify(formData);
+            const newEstimatedSize = new Blob([newFormDataString]).size;
+            if (newEstimatedSize > maxSize) {
+              throw new Error('Form data still too large after cleanup. Please remove some images or comments.');
+            }
+          } else {
+            throw new Error('Form data is too large and no old data to clean up. Please remove some images.');
           }
+        } catch (cleanupError) {
+          console.error('[Pajaritos] ❌ Error during cleanup:', cleanupError);
+          // Show user-friendly error message
+          const statusDiv = form.querySelector('#pajaritos-status');
+          if (statusDiv) {
+            statusDiv.textContent = '⚠️ Error: Los datos son demasiado grandes. Por favor, elimina algunas imágenes o comentarios.';
+            statusDiv.style.color = '#f02849';
+            statusDiv.style.display = 'block';
+            setTimeout(() => {
+              statusDiv.textContent = '';
+              statusDiv.style.display = 'none';
+            }, 5000);
+          }
+          return; // Don't save if too large
         }
-      });
+      }
       
       // Save to chrome.storage.local with the storage key (optionKey or optionKey_subtypeKey)
-      await chrome.storage.local.set({
-        [`pajaritos_form_${storageKey}`]: formData
-      });
-      
-      // Also save last selected option and subtype
-      await chrome.storage.local.set({
-        pajaritos_last_option: optionSelect.value,
-        pajaritos_last_subtype: subtypeSelect.value || null
-      });
-      
-      console.log('[Pajaritos] 💾 Form data saved for:', storageKey);
+      try {
+        // Check if extension context is valid before attempting to save
+        if (!isExtensionContextValid()) {
+          console.warn('[Pajaritos] ⚠️ Extension context invalidated, cannot save form data');
+          const statusDiv = form.querySelector('#pajaritos-status');
+          if (statusDiv) {
+            statusDiv.textContent = '⚠️ La extensión fue recargada. Por favor, recarga la página para continuar.';
+            statusDiv.style.color = '#f02849';
+            statusDiv.style.display = 'block';
+          }
+          return;
+        }
+
+        const saveResult1 = await safeStorageSet({
+          [`pajaritos_form_${storageKey}`]: formData
+        });
+        
+        if (!saveResult1.success) {
+          throw new Error('Extension context invalidated');
+        }
+        
+        // Also save last selected option and subtype
+        const saveResult2 = await safeStorageSet({
+          pajaritos_last_option: optionSelect.value,
+          pajaritos_last_subtype: subtypeSelect.value || null
+        });
+        
+        if (!saveResult2.success) {
+          throw new Error('Extension context invalidated');
+        }
+        
+        console.log('[Pajaritos] 💾 Form data saved for:', storageKey, `(${(estimatedSize / 1024).toFixed(2)} KB)`);
+      } catch (error) {
+        console.error('[Pajaritos] ❌ Error saving form data:', error);
+        
+        // Check if it's an extension context error
+        if (error.message && error.message.includes('Extension context invalidated')) {
+          const statusDiv = form.querySelector('#pajaritos-status');
+          if (statusDiv) {
+            statusDiv.textContent = '⚠️ La extensión fue recargada. Por favor, recarga la página para continuar.';
+            statusDiv.style.color = '#f02849';
+            statusDiv.style.display = 'block';
+          }
+          return;
+        }
+        
+        // Check if it's a quota error
+        if (error.message && error.message.includes('quota')) {
+          // Try to clean up old data and retry
+          try {
+            if (!isExtensionContextValid()) {
+              throw new Error('Extension context invalidated');
+            }
+            
+            const allData = await safeStorageGet(null);
+            const formDataKeys = Object.keys(allData).filter(key => key.startsWith('pajaritos_form_') && key !== `pajaritos_form_${storageKey}`);
+            
+            if (formDataKeys.length > 0) {
+              // Remove oldest form data entries
+              const keysToRemove = formDataKeys.slice(0, Math.max(0, formDataKeys.length - 3));
+              if (isExtensionContextValid()) {
+                await chrome.storage.local.remove(keysToRemove);
+              }
+              console.log('[Pajaritos] 🧹 Cleaned up', keysToRemove.length, 'old form data entries due to quota error');
+              
+              // Retry saving
+              const retryResult1 = await safeStorageSet({
+                [`pajaritos_form_${storageKey}`]: formData
+              });
+              
+              if (!retryResult1.success) {
+                throw new Error('Extension context invalidated');
+              }
+              
+              const retryResult2 = await safeStorageSet({
+                pajaritos_last_option: optionSelect.value,
+                pajaritos_last_subtype: subtypeSelect.value || null
+              });
+              
+              if (!retryResult2.success) {
+                throw new Error('Extension context invalidated');
+              }
+              
+              console.log('[Pajaritos] 💾 Form data saved after cleanup');
+              
+              // Show warning to user
+              const statusDiv = form.querySelector('#pajaritos-status');
+              if (statusDiv) {
+                statusDiv.textContent = '⚠️ Se limpiaron datos antiguos para hacer espacio. Los datos fueron guardados.';
+                statusDiv.style.color = '#f02849';
+                statusDiv.style.display = 'block';
+                setTimeout(() => {
+                  statusDiv.textContent = '';
+                  statusDiv.style.display = 'none';
+                }, 5000);
+              }
+            } else {
+              throw new Error('No hay datos antiguos para limpiar. Por favor, elimina algunas imágenes.');
+            }
+          } catch (retryError) {
+            console.error('[Pajaritos] ❌ Error during retry after cleanup:', retryError);
+            // Show user-friendly error message
+            const statusDiv = form.querySelector('#pajaritos-status');
+            if (statusDiv) {
+              statusDiv.textContent = '❌ Error: No se pudo guardar. El almacenamiento está lleno. Por favor, elimina algunas imágenes o recarga la extensión.';
+              statusDiv.style.color = '#f02849';
+              statusDiv.style.display = 'block';
+            }
+          }
+        } else {
+          // Other error
+          console.error('[Pajaritos] ❌ Unexpected error saving form data:', error);
+          const statusDiv = form.querySelector('#pajaritos-status');
+          if (statusDiv) {
+            statusDiv.textContent = '❌ Error al guardar los datos. Por favor, intenta nuevamente.';
+            statusDiv.style.color = '#f02849';
+            statusDiv.style.display = 'block';
+            setTimeout(() => {
+              statusDiv.textContent = '';
+              statusDiv.style.display = 'none';
+            }, 5000);
+          }
+        }
+      }
     }
 
     // Function to load form data
     async function loadFormData(optionKey) {
       const storageKey = `pajaritos_form_${optionKey}`;
-      const result = await chrome.storage.local.get([storageKey]);
+      const result = await safeStorageGet([storageKey]);
       return result[storageKey] || null;
     }
 
@@ -1805,51 +2003,144 @@
 
     // Function to load replies into the form
     function loadReplies(replies, savedData, storageKey) {
+      // Load additional custom comments first
+      const additionalComments = savedData?.additionalComments || [];
+      
+      // Create a combined array of all comments (base + custom) with metadata
+      const allComments = [];
+      
+      // Add base replies with metadata
+      replies.forEach((reply, idx) => {
+        const id = reply.id || `index_${idx}`;
+        allComments.push({
+          type: 'base',
+          id: id,
+          reply: reply,
+          originalIndex: idx
+        });
+      });
+      
+      // Add custom comments with metadata
+      additionalComments.forEach((additionalComment, idx) => {
+        const customId = additionalComment.id || generateCustomCommentId();
+        allComments.push({
+          type: 'custom',
+          id: customId,
+          data: additionalComment,
+          originalIndex: replies.length + idx
+        });
+      });
+      
+      // Reorder all comments based on saved order if available
+      let orderedComments = [...allComments];
+      if (savedData?.order && Array.isArray(savedData.order) && savedData.order.length > 0) {
+        // Create a map of all comments by ID
+        const commentMap = new Map();
+        allComments.forEach(comment => {
+          commentMap.set(comment.id, comment);
+        });
+        
+        // Reorder based on saved order
+        orderedComments = savedData.order
+          .map(id => commentMap.get(id))
+          .filter(comment => comment !== undefined);
+        
+        // Add any comments that weren't in the saved order (for backward compatibility)
+        const orderedIds = new Set(savedData.order);
+        allComments.forEach(comment => {
+          if (!orderedIds.has(comment.id)) {
+            orderedComments.push(comment);
+          }
+        });
+      }
+      
       let repliesHtml = '';
 
-      replies.forEach((reply, index) => {
-        // Get comment ID (new system) or use index as fallback (old system compatibility)
-        const commentId = reply.id || `index_${index}`;
+      orderedComments.forEach((commentData, index) => {
+        let commentId, displayText, savedChecked, isCustomImage, savedCustomImage, imageWasRemoved, replyImage, defaultImageUrl;
+        let isCustom = false;
         
-        // Try to get saved data by ID first, then by index (for backward compatibility)
-        const savedTextById = savedData?.textsById?.[commentId];
-        const savedTextByIndex = savedData?.texts?.[index.toString()] || savedData?.texts?.[index];
-        const savedText = savedTextById || savedTextByIndex;
+        // Handle base comments
+        if (commentData.type === 'base') {
+          const reply = commentData.reply;
+          commentId = commentData.id;
+          replyImage = reply.image || '';
+          defaultImageUrl = reply.image ? safeGetExtensionURL(`images/${reply.image}`) : null;
+          
+          // Try to get saved data by ID first, then by index (for backward compatibility)
+          const savedTextById = savedData?.textsById?.[commentId];
+          const savedTextByIndex = savedData?.texts?.[index.toString()] || savedData?.texts?.[index];
+          const savedText = savedTextById || savedTextByIndex;
+          
+          // Determine if comment was edited: if saved text exists and differs from config text
+          const wasEdited = savedText && savedText !== reply.text;
+          
+          // Use saved text if it was edited, otherwise use config text (allows auto-updates)
+          displayText = wasEdited ? savedText : reply.text;
+          
+          // Checkbox state: try by ID first, then by index
+          const savedCheckedById = savedData?.checkboxesById?.[commentId];
+          const savedCheckedByIndex = savedData?.checkboxes?.[index.toString()] !== undefined 
+                             ? savedData.checkboxes[index.toString()] 
+                             : (savedData?.checkboxes?.[index] !== undefined ? savedData.checkboxes[index] : true);
+          savedChecked = savedCheckedById !== undefined ? savedCheckedById : savedCheckedByIndex;
+          
+          // Check if image was removed: try by ID first, then by index
+          const imageRemovedById = savedData?.imagesRemovedById?.[commentId] === true;
+          const imageRemovedByIndex = savedData?.imagesRemoved?.[index.toString()] === true || 
+                                 savedData?.imagesRemoved?.[index] === true;
+          imageWasRemoved = imageRemovedById || imageRemovedByIndex;
+          
+          // Use custom image: try by ID first, then by index
+          const savedCustomImageById = savedData?.imagesById?.[commentId] || null;
+          const savedCustomImageByIndex = savedData?.images?.[index.toString()] || savedData?.images?.[index] || null;
+          savedCustomImage = savedCustomImageById || savedCustomImageByIndex;
+          isCustomImage = savedCustomImage !== null;
+        } else {
+          // Handle custom comments
+          isCustom = true;
+          const additionalComment = commentData.data;
+          commentId = additionalComment.id || generateCustomCommentId();
+          displayText = additionalComment.text || '';
+          savedChecked = additionalComment.checked !== undefined ? additionalComment.checked : true;
+          savedCustomImage = additionalComment.image || null;
+          imageWasRemoved = additionalComment.imageRemoved === true;
+          isCustomImage = savedCustomImage !== null;
+          replyImage = '';
+          defaultImageUrl = null;
+        }
         
-        // Determine if comment was edited: if saved text exists and differs from config text
-        const wasEdited = savedText && savedText !== reply.text;
-        
-        // Use saved text if it was edited, otherwise use config text (allows auto-updates)
-        const displayText = wasEdited ? savedText : reply.text;
-        
-        // Checkbox state: try by ID first, then by index
-        const savedCheckedById = savedData?.checkboxesById?.[commentId];
-        const savedCheckedByIndex = savedData?.checkboxes?.[index.toString()] !== undefined 
-                           ? savedData.checkboxes[index.toString()] 
-                           : (savedData?.checkboxes?.[index] !== undefined ? savedData.checkboxes[index] : true);
-        const savedChecked = savedCheckedById !== undefined ? savedCheckedById : savedCheckedByIndex;
-        
-        // Check if image was removed: try by ID first, then by index
-        const imageRemovedById = savedData?.imagesRemovedById?.[commentId] === true;
-        const imageRemovedByIndex = savedData?.imagesRemoved?.[index.toString()] === true || 
-                               savedData?.imagesRemoved?.[index] === true;
-        const imageWasRemoved = imageRemovedById || imageRemovedByIndex;
-        
-        // Use custom image: try by ID first, then by index
-        const savedCustomImageById = savedData?.imagesById?.[commentId] || null;
-        const savedCustomImageByIndex = savedData?.images?.[index.toString()] || savedData?.images?.[index] || null;
-        const savedCustomImage = savedCustomImageById || savedCustomImageByIndex;
-        
-        const defaultImageUrl = reply.image ? chrome.runtime.getURL(`images/${reply.image}`) : null;
+        // Calculate display image URL (single calculation for both types)
         const displayImageUrl = imageWasRemoved ? null : (savedCustomImage || defaultImageUrl);
-        const hasImage = displayImageUrl !== null && !imageWasRemoved;
-        const isCustomImage = savedCustomImage !== null;
+        const finalHasImage = displayImageUrl !== null;
         
         repliesHtml += `
-          <div style="margin-bottom: 20px; padding: 16px; border: 1px solid #e4e6eb; border-radius: 8px; background: #f8f9fa;">
+          <div class="pajaritos-reply-item" data-comment-id="${commentId}" data-index="${index}" ${isCustom ? 'data-custom="true"' : ''} style="margin-bottom: 20px; padding: 16px; border: 1px solid #e4e6eb; border-radius: 8px; background: #f8f9fa; ${isCustom ? 'border-left: 3px solid #42b72a;' : ''}">
             <div style="display: flex; align-items: center; margin-bottom: 8px;">
+              <div style="display: flex; flex-direction: column; gap: 4px; margin-right: 8px;">
+                <button type="button" class="pajaritos-move-up-btn" data-index="${index}" data-comment-id="${commentId}" ${isCustom ? 'data-custom="true"' : ''} style="
+                  padding: 2px 6px;
+                  font-size: 10px;
+                  background: #1877f2;
+                  color: white;
+                  border: none;
+                  border-radius: 3px;
+                  cursor: pointer;
+                  ${index === 0 ? 'opacity: 0.5; cursor: not-allowed;' : ''}
+                " title="Mover arriba">▲</button>
+                <button type="button" class="pajaritos-move-down-btn" data-index="${index}" data-comment-id="${commentId}" ${isCustom ? 'data-custom="true"' : ''} style="
+                  padding: 2px 6px;
+                  font-size: 10px;
+                  background: #1877f2;
+                  color: white;
+                  border: none;
+                  border-radius: 3px;
+                  cursor: pointer;
+                  ${index === orderedComments.length - 1 ? 'opacity: 0.5; cursor: not-allowed;' : ''}
+                " title="Mover abajo">▼</button>
+              </div>
               <label style="display: flex; align-items: center; cursor: pointer; flex: 1;">
-                <input type="checkbox" class="pajaritos-reply-checkbox" data-index="${index}" data-comment-id="${commentId}" ${savedChecked ? 'checked' : ''} style="
+                <input type="checkbox" class="pajaritos-reply-checkbox" data-index="${index}" data-comment-id="${commentId}" ${isCustom ? 'data-custom="true"' : ''} ${savedChecked ? 'checked' : ''} style="
                   width: 18px;
                   height: 18px;
                   margin-right: 8px;
@@ -1857,12 +2148,12 @@
                 ">
                 <span style="font-weight: 500; color: #333;">Comentario ${index + 1}:</span>
               </label>
-              ${hasImage ? `
+              ${finalHasImage ? `
                 <div style="display: flex; align-items: center; gap: 8px; margin-left: auto;">
-                  <img class="pajaritos-image-preview" data-index="${index}" data-comment-id="${commentId}" data-custom-image="${isCustomImage ? savedCustomImage : ''}" data-image-url="${displayImageUrl}" src="${displayImageUrl}" style="max-width: 80px; max-height: 80px; border-radius: 4px; object-fit: cover; cursor: pointer;" onerror="this.style.display='none'" title="Click para descargar">
+                  <img class="pajaritos-image-preview" data-index="${index}" data-comment-id="${commentId}" ${isCustom ? 'data-custom="true"' : ''} data-custom-image="${isCustomImage ? savedCustomImage : ''}" data-image-url="${displayImageUrl}" src="${displayImageUrl}" style="max-width: 80px; max-height: 80px; border-radius: 4px; object-fit: cover; cursor: pointer;" onerror="this.style.display='none'" title="Click para descargar">
                   <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <input type="file" accept="image/*" class="pajaritos-image-input" data-index="${index}" style="display: none;">
-                    <button type="button" class="pajaritos-download-image-btn" data-index="${index}" data-image-url="${displayImageUrl}" style="
+                    <input type="file" accept="image/*" class="pajaritos-image-input" data-index="${index}" data-comment-id="${commentId}" style="display: none;">
+                    <button type="button" class="pajaritos-download-image-btn" data-index="${index}" data-comment-id="${commentId}" data-image-url="${displayImageUrl}" style="
                       padding: 4px 8px;
                       font-size: 11px;
                       background: #42b72a;
@@ -1871,7 +2162,7 @@
                       border-radius: 4px;
                       cursor: pointer;
                     ">⬇️ Descargar imagen</button>
-                    <button type="button" class="pajaritos-change-image-btn" data-index="${index}" style="
+                    <button type="button" class="pajaritos-change-image-btn" data-index="${index}" data-comment-id="${commentId}" style="
                       padding: 4px 8px;
                       font-size: 11px;
                       background: #1877f2;
@@ -1880,7 +2171,7 @@
                       border-radius: 4px;
                       cursor: pointer;
                     ">Cambiar imagen</button>
-                    <button type="button" class="pajaritos-remove-image-btn" data-index="${index}" style="
+                    <button type="button" class="pajaritos-remove-image-btn" data-index="${index}" data-comment-id="${commentId}" style="
                       padding: 4px 8px;
                       font-size: 11px;
                       background: #f02849;
@@ -1893,8 +2184,8 @@
                 </div>
               ` : `
                 <div style="margin-left: auto;">
-                  <input type="file" accept="image/*" class="pajaritos-image-input" data-index="${index}" style="display: none;">
-                  <button type="button" class="pajaritos-add-image-btn" data-index="${index}" style="
+                  <input type="file" accept="image/*" class="pajaritos-image-input" data-index="${index}" data-comment-id="${commentId}" style="display: none;">
+                  <button type="button" class="pajaritos-add-image-btn" data-index="${index}" data-comment-id="${commentId}" style="
                     padding: 6px 12px;
                     font-size: 12px;
                     background: #42b72a;
@@ -1916,7 +2207,7 @@
                 cursor: pointer;
               ">🗑️ Eliminar comentario</button>
             </div>
-            <textarea class="pajaritos-reply-input" data-index="${index}" data-comment-id="${commentId}" data-image="${reply.image || ''}" ${imageWasRemoved ? 'data-image-removed="true"' : ''} placeholder="Escribe tu comentario aquí..." style="
+            <textarea class="pajaritos-reply-input" data-index="${index}" data-comment-id="${commentId}" ${isCustom ? 'data-custom="true"' : ''} data-image="${replyImage}" ${imageWasRemoved ? 'data-image-removed="true"' : ''} placeholder="Escribe tu comentario aquí..." style="
               width: 100%;
               min-height: 80px;
               padding: 10px;
@@ -1927,106 +2218,7 @@
               resize: vertical;
               box-sizing: border-box;
             ">${displayText}</textarea>
-            ${hasImage ? `<div style="margin-top: 8px; font-size: 12px; color: #65676b;">📷 ${isCustomImage ? 'Imagen personalizada' : `Imagen asociada: ${reply.image}`}</div>` : ''}
-          </div>
-        `;
-      });
-
-      // Load additional custom comments (Comentario 4, 5, etc.)
-      const additionalComments = savedData?.additionalComments || [];
-      additionalComments.forEach((additionalComment, idx) => {
-        const actualIndex = replies.length + idx;
-        // Use saved ID or generate new one (for backward compatibility)
-        const customId = additionalComment.id || generateCustomCommentId();
-        const savedText = additionalComment.text || '';
-        const savedChecked = additionalComment.checked !== undefined ? additionalComment.checked : true;
-        const savedCustomImage = additionalComment.image || null;
-        const imageWasRemoved = additionalComment.imageRemoved === true;
-        const hasImage = savedCustomImage && !imageWasRemoved;
-        
-        repliesHtml += `
-          <div style="margin-bottom: 20px; padding: 16px; border: 1px solid #e4e6eb; border-radius: 8px; background: #f8f9fa; border-left: 3px solid #42b72a;">
-            <div style="display: flex; align-items: center; margin-bottom: 8px;">
-              <label style="display: flex; align-items: center; cursor: pointer; flex: 1;">
-                <input type="checkbox" class="pajaritos-reply-checkbox" data-index="${actualIndex}" data-custom="true" data-comment-id="${customId}" ${savedChecked ? 'checked' : ''} style="
-                  width: 18px;
-                  height: 18px;
-                  margin-right: 8px;
-                  cursor: pointer;
-                ">
-                <span style="font-weight: 500; color: #333;">Comentario ${actualIndex + 1}:</span>
-              </label>
-              ${hasImage ? `
-                <div style="display: flex; align-items: center; gap: 8px; margin-left: auto;">
-                  <img class="pajaritos-image-preview" data-index="${actualIndex}" data-comment-id="${customId}" data-custom-image="${savedCustomImage}" data-image-url="${savedCustomImage}" src="${savedCustomImage}" style="max-width: 80px; max-height: 80px; border-radius: 4px; object-fit: cover; cursor: pointer;" onerror="this.style.display='none'" title="Click para descargar">
-                  <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <input type="file" accept="image/*" class="pajaritos-image-input" data-index="${actualIndex}" style="display: none;">
-                    <button type="button" class="pajaritos-download-image-btn" data-index="${actualIndex}" data-image-url="${savedCustomImage}" style="
-                      padding: 4px 8px;
-                      font-size: 11px;
-                      background: #42b72a;
-                      color: white;
-                      border: none;
-                      border-radius: 4px;
-                      cursor: pointer;
-                    ">⬇️ Descargar imagen</button>
-                    <button type="button" class="pajaritos-change-image-btn" data-index="${actualIndex}" style="
-                      padding: 4px 8px;
-                      font-size: 11px;
-                      background: #1877f2;
-                      color: white;
-                      border: none;
-                      border-radius: 4px;
-                      cursor: pointer;
-                    ">Cambiar imagen</button>
-                    <button type="button" class="pajaritos-remove-image-btn" data-index="${actualIndex}" style="
-                      padding: 4px 8px;
-                      font-size: 11px;
-                      background: #f02849;
-                      color: white;
-                      border: none;
-                      border-radius: 4px;
-                      cursor: pointer;
-                    ">Remover imagen</button>
-                  </div>
-                </div>
-              ` : `
-                <div style="margin-left: auto;">
-                  <input type="file" accept="image/*" class="pajaritos-image-input" data-index="${actualIndex}" style="display: none;">
-                  <button type="button" class="pajaritos-add-image-btn" data-index="${actualIndex}" style="
-                    padding: 6px 12px;
-                    font-size: 12px;
-                    background: #42b72a;
-                    color: white;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                  ">➕ Agregar imagen</button>
-                </div>
-              `}
-              <button type="button" class="pajaritos-delete-comment-btn" data-index="${actualIndex}" style="
-                margin-left: 8px;
-                padding: 4px 8px;
-                font-size: 11px;
-                background: #f02849;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-              ">🗑️ Eliminar comentario</button>
-            </div>
-            <textarea class="pajaritos-reply-input" data-index="${actualIndex}" data-custom="true" data-comment-id="${customId}" data-image="" ${imageWasRemoved ? 'data-image-removed="true"' : ''} placeholder="Escribe tu comentario aquí..." style="
-              width: 100%;
-              min-height: 80px;
-              padding: 10px;
-              border: 2px solid #e4e6eb;
-              border-radius: 6px;
-              font-size: 14px;
-              font-family: inherit;
-              resize: vertical;
-              box-sizing: border-box;
-            ">${savedText}</textarea>
-            ${hasImage ? `<div style="margin-top: 8px; font-size: 12px; color: #65676b;">📷 Imagen personalizada</div>` : ''}
+            ${finalHasImage ? `<div style="margin-top: 8px; font-size: 12px; color: #65676b;">📷 ${isCustomImage ? 'Imagen personalizada' : (commentData.type === 'base' ? `Imagen asociada: ${commentData.reply.image}` : 'Imagen personalizada')}</div>` : ''}
           </div>
         `;
       });
@@ -2058,11 +2250,53 @@
       const removeImageBtns = repliesContainer.querySelectorAll('.pajaritos-remove-image-btn');
       const addImageBtns = repliesContainer.querySelectorAll('.pajaritos-add-image-btn');
 
-      // Function to convert image file to base64
+      // Function to compress image to reduce storage size
+      function compressImage(base64Data, maxWidth = 800, maxHeight = 800, quality = 0.7) {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            // Calculate new dimensions
+            let width = img.width;
+            let height = img.height;
+            
+            if (width > maxWidth || height > maxHeight) {
+              const ratio = Math.min(maxWidth / width, maxHeight / height);
+              width = width * ratio;
+              height = height * ratio;
+            }
+            
+            // Create canvas and compress
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // Convert to compressed base64
+            const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+            resolve(compressedBase64);
+          };
+          img.onerror = reject;
+          img.src = base64Data;
+        });
+      }
+
+      // Function to convert image file to base64 (with compression)
       function imageToBase64(file) {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
+          reader.onload = async () => {
+            try {
+              const originalBase64 = reader.result;
+              // Compress image to reduce storage size
+              const compressedBase64 = await compressImage(originalBase64);
+              resolve(compressedBase64);
+            } catch (error) {
+              console.error('[Pajaritos] Error compressing image:', error);
+              // Fallback to original if compression fails
+              resolve(reader.result);
+            }
+          };
           reader.onerror = reject;
           reader.readAsDataURL(file);
         });
@@ -2106,10 +2340,17 @@
           if (replyDiv) {
             const headerDiv = replyDiv.querySelector('div[style*="display: flex"]');
             if (headerDiv) {
-              // Remove add image button if exists
-              const addBtn = headerDiv.querySelector('.pajaritos-add-image-btn');
+              // Remove add image button and its container if exists
+              const addBtn = headerDiv.querySelector(`.pajaritos-add-image-btn[data-index="${index}"]`);
               if (addBtn) {
-                addBtn.remove();
+                // Remove the entire container div that holds the button
+                const buttonContainer = addBtn.closest('div[style*="margin-left: auto"]');
+                if (buttonContainer) {
+                  buttonContainer.remove();
+                } else {
+                  // Fallback: just remove the button if container not found
+                  addBtn.remove();
+                }
               }
               
               // Add image preview with buttons
@@ -2124,8 +2365,8 @@
               imageContainer.innerHTML = `
                 <img class="pajaritos-image-preview" data-index="${index}" data-comment-id="${commentId || ''}" data-custom-image="${base64Data}" data-image-url="${base64Data}" src="${base64Data}" style="max-width: 80px; max-height: 80px; border-radius: 4px; object-fit: cover; cursor: pointer;" title="Click para descargar">
                 <div style="display: flex; flex-direction: column; gap: 4px;">
-                  <input type="file" accept="image/*" class="pajaritos-image-input" data-index="${index}" style="display: none;">
-                  <button type="button" class="pajaritos-download-image-btn" data-index="${index}" data-image-url="${base64Data}" style="
+                  <input type="file" accept="image/*" class="pajaritos-image-input" data-index="${index}" data-comment-id="${commentId || ''}" style="display: none;">
+                  <button type="button" class="pajaritos-download-image-btn" data-index="${index}" data-comment-id="${commentId || ''}" data-image-url="${base64Data}" style="
                     padding: 4px 8px;
                     font-size: 11px;
                     background: #42b72a;
@@ -2155,6 +2396,18 @@
                 </div>
               `;
               headerDiv.appendChild(imageContainer);
+              
+              // Ensure the image preview has the correct data attributes set via JavaScript
+              // (innerHTML attributes should work, but this ensures it's set correctly)
+              const newPreview = imageContainer.querySelector('.pajaritos-image-preview');
+              if (newPreview) {
+                newPreview.dataset.customImage = base64Data;
+                newPreview.dataset.imageUrl = base64Data;
+                newPreview.dataset.index = index;
+                if (commentId) {
+                  newPreview.dataset.commentId = commentId;
+                }
+              }
               
               // Update info text
               const infoDiv = replyDiv.querySelector('div[style*="margin-top: 8px"]');
@@ -2188,11 +2441,15 @@
           if (replyDiv) {
             const headerDiv = replyDiv.querySelector('div[style*="display: flex"]');
             if (headerDiv) {
+              // Get the input element to retrieve commentId
+              const replyInput = repliesContainer.querySelector(`.pajaritos-reply-input[data-index="${index}"]`);
+              const commentId = replyInput ? (replyInput.dataset.commentId || '') : '';
+              
               const addContainer = document.createElement('div');
               addContainer.style.cssText = 'margin-left: auto;';
               addContainer.innerHTML = `
-                <input type="file" accept="image/*" class="pajaritos-image-input" data-index="${index}" style="display: none;">
-                <button type="button" class="pajaritos-add-image-btn" data-index="${index}" style="
+                <input type="file" accept="image/*" class="pajaritos-image-input" data-index="${index}" data-comment-id="${commentId}" style="display: none;">
+                <button type="button" class="pajaritos-add-image-btn" data-index="${index}" data-comment-id="${commentId}" style="
                   padding: 6px 12px;
                   font-size: 12px;
                   background: #42b72a;
@@ -2211,9 +2468,8 @@
               }
               
               // Mark image as removed in the input dataset
-              const input = replyDiv.querySelector(`.pajaritos-reply-input[data-index="${index}"]`);
-              if (input) {
-                input.dataset.imageRemoved = 'true';
+              if (replyInput) {
+                replyInput.dataset.imageRemoved = 'true';
               }
               
               // Re-attach event listeners
@@ -2331,8 +2587,28 @@
         const customId = generateCustomCommentId();
         
         const newCommentHtml = `
-          <div style="margin-bottom: 20px; padding: 16px; border: 1px solid #e4e6eb; border-radius: 8px; background: #f8f9fa; border-left: 3px solid #42b72a;">
+          <div class="pajaritos-reply-item" data-comment-id="${customId}" data-index="${newIndex}" data-custom="true" style="margin-bottom: 20px; padding: 16px; border: 1px solid #e4e6eb; border-radius: 8px; background: #f8f9fa; border-left: 3px solid #42b72a;">
             <div style="display: flex; align-items: center; margin-bottom: 8px;">
+              <div style="display: flex; flex-direction: column; gap: 4px; margin-right: 8px;">
+                <button type="button" class="pajaritos-move-up-btn" data-index="${newIndex}" data-comment-id="${customId}" data-custom="true" style="
+                  padding: 2px 6px;
+                  font-size: 10px;
+                  background: #1877f2;
+                  color: white;
+                  border: none;
+                  border-radius: 3px;
+                  cursor: pointer;
+                " title="Mover arriba">▲</button>
+                <button type="button" class="pajaritos-move-down-btn" data-index="${newIndex}" data-comment-id="${customId}" data-custom="true" style="
+                  padding: 2px 6px;
+                  font-size: 10px;
+                  background: #1877f2;
+                  color: white;
+                  border: none;
+                  border-radius: 3px;
+                  cursor: pointer;
+                " title="Mover abajo">▼</button>
+              </div>
               <label style="display: flex; align-items: center; cursor: pointer; flex: 1;">
                 <input type="checkbox" class="pajaritos-reply-checkbox" data-index="${newIndex}" data-custom="true" data-comment-id="${customId}" checked style="
                   width: 18px;
@@ -2343,8 +2619,8 @@
                 <span style="font-weight: 500; color: #333;">Comentario ${newIndex + 1}:</span>
               </label>
               <div style="margin-left: auto;">
-                <input type="file" accept="image/*" class="pajaritos-image-input" data-index="${newIndex}" style="display: none;">
-                <button type="button" class="pajaritos-add-image-btn" data-index="${newIndex}" style="
+                <input type="file" accept="image/*" class="pajaritos-image-input" data-index="${newIndex}" data-comment-id="${customId}" style="display: none;">
+                <button type="button" class="pajaritos-add-image-btn" data-index="${newIndex}" data-comment-id="${customId}" style="
                   padding: 6px 12px;
                   font-size: 12px;
                   background: #42b72a;
@@ -2380,11 +2656,21 @@
         `;
         
         // Insert before the "Add new comment" button
+        // Make sure we insert directly into repliesContainer, not into any wrapper
         const addBtn = repliesContainer.querySelector('#pajaritos-add-new-comment-btn');
         if (addBtn) {
           const tempDiv = document.createElement('div');
           tempDiv.innerHTML = newCommentHtml;
-          addBtn.parentElement.insertBefore(tempDiv.firstElementChild, addBtn);
+          const newCommentElement = tempDiv.firstElementChild;
+          // Insert into repliesContainer directly, before the button's parent wrapper
+          const buttonWrapper = addBtn.closest('div');
+          if (buttonWrapper && buttonWrapper.parentNode === repliesContainer) {
+            // Button is in a wrapper div that's a direct child of repliesContainer
+            repliesContainer.insertBefore(newCommentElement, buttonWrapper);
+          } else {
+            // Fallback: insert before the button itself
+            repliesContainer.insertBefore(newCommentElement, addBtn);
+          }
         } else {
           repliesContainer.insertAdjacentHTML('beforeend', newCommentHtml);
         }
@@ -2392,15 +2678,17 @@
         // Setup event listeners for the new comment
         setupImageButtons();
         setupNewCommentListeners();
+        updateReplyIndices();
         saveFormData();
       }
 
       // Function to delete a comment (original or custom)
       function deleteComment(index) {
-        const commentDiv = repliesContainer.querySelector(`.pajaritos-reply-input[data-index="${index}"]`)?.closest('div[style*="margin-bottom: 20px"]');
+        const commentDiv = repliesContainer.querySelector(`.pajaritos-reply-input[data-index="${index}"]`)?.closest('.pajaritos-reply-item');
         if (commentDiv) {
           if (confirm('¿Estás seguro de que quieres eliminar este comentario?')) {
             commentDiv.remove();
+            updateReplyIndices();
             saveFormData();
           }
         }
@@ -2443,7 +2731,7 @@
             try {
               // Try to convert relative path to extension URL
               const extensionUrl = imageUrl.startsWith('/') || !imageUrl.includes('://') 
-                ? chrome.runtime.getURL(imageUrl.startsWith('/') ? imageUrl.substring(1) : imageUrl)
+                ? safeGetExtensionURL(imageUrl.startsWith('/') ? imageUrl.substring(1) : imageUrl)
                 : imageUrl;
               const response = await fetch(extensionUrl);
               if (!response.ok) throw new Error('Failed to fetch image');
@@ -2484,10 +2772,186 @@
         }
       }
 
+      // Function to swap two adjacent reply items
+      function swapReplies(currentIndex, direction) {
+        // Re-query items to ensure we have the current DOM state
+        // Only get items that are direct children of repliesContainer to avoid wrapper issues
+        const allItems = Array.from(repliesContainer.children).filter(child => 
+          child.classList.contains('pajaritos-reply-item')
+        );
+        const currentItem = allItems[currentIndex];
+        
+        if (!currentItem) return;
+        
+        // Calculate target index, but make sure we don't go beyond the actual items
+        const lastItemIndex = allItems.length - 1;
+        
+        let targetIndex;
+        if (direction === 'up') {
+          targetIndex = currentIndex - 1;
+          if (targetIndex < 0) return; // Can't move up from first position
+        } else {
+          targetIndex = currentIndex + 1;
+          if (targetIndex > lastItemIndex) return; // Can't move down from last position
+        }
+        
+        const targetItem = allItems[targetIndex];
+        if (!targetItem) return;
+        
+        // Both items should be direct children of repliesContainer
+        // Use repliesContainer as the parent for all swaps
+        if (currentItem.parentNode !== repliesContainer || targetItem.parentNode !== repliesContainer) {
+          console.error('[Pajaritos] Items are not direct children of repliesContainer', {
+            currentParent: currentItem.parentNode,
+            targetParent: targetItem.parentNode,
+            repliesContainer: repliesContainer
+          });
+          // Try to fix by moving items to repliesContainer if needed
+          if (currentItem.parentNode !== repliesContainer) {
+            repliesContainer.appendChild(currentItem);
+          }
+          if (targetItem.parentNode !== repliesContainer) {
+            repliesContainer.appendChild(targetItem);
+          }
+          // Re-query after fixing
+          const fixedItems = Array.from(repliesContainer.children).filter(child => 
+            child.classList.contains('pajaritos-reply-item')
+          );
+          const newCurrentIndex = fixedItems.indexOf(currentItem);
+          const newTargetIndex = fixedItems.indexOf(targetItem);
+          if (newCurrentIndex === -1 || newTargetIndex === -1) {
+            console.error('[Pajaritos] Could not fix item positions');
+            return;
+          }
+          // Continue with the swap using repliesContainer as parent
+        }
+        
+        // Verify both items are actually children of repliesContainer
+        if (!repliesContainer.contains(currentItem) || !repliesContainer.contains(targetItem)) {
+          console.error('[Pajaritos] Items are not children of repliesContainer');
+          return;
+        }
+        
+        // Swap the items in the DOM
+        // Always use repliesContainer as the parent to ensure consistency
+        try {
+          if (direction === 'up') {
+            // Move currentItem before targetItem
+            repliesContainer.insertBefore(currentItem, targetItem);
+          } else {
+            // Move currentItem after targetItem
+            // Get the next sibling of targetItem to insert before it
+            const nextSibling = targetItem.nextSibling;
+            if (nextSibling && nextSibling.classList.contains('pajaritos-reply-item')) {
+              // Next sibling is also a reply item, insert before it
+              repliesContainer.insertBefore(currentItem, nextSibling);
+            } else {
+              // Next sibling is the "Add new comment" button wrapper or nothing
+              // Insert before the next sibling (which might be the button wrapper)
+              if (nextSibling) {
+                repliesContainer.insertBefore(currentItem, nextSibling);
+              } else {
+                // targetItem is the last reply item, append currentItem after it
+                repliesContainer.insertBefore(currentItem, targetItem.nextSibling);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('[Pajaritos] Error swapping items:', error);
+          return;
+        }
+        
+        // Update all indices and labels
+        updateReplyIndices();
+        
+        // Save the new order
+        saveFormData();
+      }
+      
+      // Function to update indices and labels after reordering
+      function updateReplyIndices() {
+        const allItems = Array.from(repliesContainer.querySelectorAll('.pajaritos-reply-item'));
+        allItems.forEach((item, newIndex) => {
+          // Get comment ID for reliable element finding
+          const commentId = item.dataset.commentId;
+          
+          // Update data-index on the container
+          item.dataset.index = newIndex;
+          
+          // Update all elements inside with data-index
+          const inputs = item.querySelectorAll('[data-index]');
+          inputs.forEach(el => {
+            el.dataset.index = newIndex;
+          });
+          
+          // Explicitly update image preview index (it might be in a different container structure)
+          if (commentId) {
+            const imagePreview = repliesContainer.querySelector(`.pajaritos-image-preview[data-comment-id="${commentId}"]`);
+            if (imagePreview) {
+              imagePreview.dataset.index = newIndex;
+            }
+            // Also update image input and buttons
+            const imageInput = repliesContainer.querySelector(`.pajaritos-image-input[data-comment-id="${commentId}"]`);
+            if (imageInput) {
+              imageInput.dataset.index = newIndex;
+            }
+            const addImageBtn = repliesContainer.querySelector(`.pajaritos-add-image-btn[data-comment-id="${commentId}"]`);
+            if (addImageBtn) {
+              addImageBtn.dataset.index = newIndex;
+            }
+            const changeImageBtn = repliesContainer.querySelector(`.pajaritos-change-image-btn[data-comment-id="${commentId}"]`);
+            if (changeImageBtn) {
+              changeImageBtn.dataset.index = newIndex;
+            }
+            const removeImageBtn = repliesContainer.querySelector(`.pajaritos-remove-image-btn[data-comment-id="${commentId}"]`);
+            if (removeImageBtn) {
+              removeImageBtn.dataset.index = newIndex;
+            }
+            const downloadImageBtn = repliesContainer.querySelector(`.pajaritos-download-image-btn[data-comment-id="${commentId}"]`);
+            if (downloadImageBtn) {
+              downloadImageBtn.dataset.index = newIndex;
+            }
+          }
+          
+          // Update label text
+          const label = item.querySelector('label span');
+          if (label) {
+            label.textContent = `Comentario ${newIndex + 1}:`;
+          }
+          
+          // Update up/down button states
+          const upBtn = item.querySelector('.pajaritos-move-up-btn');
+          const downBtn = item.querySelector('.pajaritos-move-down-btn');
+          if (upBtn) {
+            if (newIndex === 0) {
+              upBtn.style.opacity = '0.5';
+              upBtn.style.cursor = 'not-allowed';
+            } else {
+              upBtn.style.opacity = '1';
+              upBtn.style.cursor = 'pointer';
+            }
+          }
+          if (downBtn) {
+            // Exclude the "Add new comment" button from the count
+            const addNewBtn = repliesContainer.querySelector('#pajaritos-add-new-comment-btn');
+            const lastItemIndex = addNewBtn ? allItems.length - 1 : allItems.length;
+            if (newIndex >= lastItemIndex) {
+              downBtn.style.opacity = '0.5';
+              downBtn.style.cursor = 'not-allowed';
+            } else {
+              downBtn.style.opacity = '1';
+              downBtn.style.cursor = 'pointer';
+            }
+          }
+        });
+      }
+      
       // Function to setup listeners for new comment and delete buttons
       function setupNewCommentListeners() {
         const addNewBtn = repliesContainer.querySelector('#pajaritos-add-new-comment-btn');
         const deleteBtns = repliesContainer.querySelectorAll('.pajaritos-delete-comment-btn');
+        const moveUpBtns = repliesContainer.querySelectorAll('.pajaritos-move-up-btn');
+        const moveDownBtns = repliesContainer.querySelectorAll('.pajaritos-move-down-btn');
         
         if (addNewBtn) {
           addNewBtn.onclick = () => {
@@ -2499,6 +2963,25 @@
           btn.onclick = () => {
             const index = parseInt(btn.dataset.index);
             deleteComment(index);
+          };
+        });
+        
+        moveUpBtns.forEach(btn => {
+          btn.onclick = () => {
+            const index = parseInt(btn.dataset.index);
+            if (index > 0) {
+              swapReplies(index, 'up');
+            }
+          };
+        });
+        
+        moveDownBtns.forEach(btn => {
+          btn.onclick = () => {
+            const index = parseInt(btn.dataset.index);
+            const allItems = repliesContainer.querySelectorAll('.pajaritos-reply-item');
+            if (index < allItems.length - 1) {
+              swapReplies(index, 'down');
+            }
           };
         });
         
@@ -2531,6 +3014,9 @@
       // Setup image buttons
       setupImageButtons();
       setupNewCommentListeners();
+      
+      // Update indices and button states after loading
+      updateReplyIndices();
 
       // Save on text input (with debounce)
       let saveTimeout;
@@ -2551,14 +3037,19 @@
       });
     }
 
-    // Cancel handler - save before closing
+    // Abort flag to stop comment sending when modal is closed
+    let isAborted = false;
+
+    // Cancel handler - save before closing and abort comment sending
     cancelBtn.addEventListener('click', async () => {
+      isAborted = true;
       await saveFormData();
       overlay.remove();
     });
 
     // Close X button handler - same behavior as Cancel
     closeXBtn.addEventListener('click', async () => {
+      isAborted = true;
       await saveFormData();
       overlay.remove();
     });
@@ -2568,6 +3059,17 @@
 
     // Submit handler - send all comments sequentially
     submitBtn.addEventListener('click', async () => {
+      // Check if extension context is valid before starting submission
+      if (!isExtensionContextValid()) {
+        statusDiv.textContent = '⚠️ La extensión fue recargada. Por favor, recarga la página para continuar publicando comentarios.';
+        statusDiv.style.color = '#f02849';
+        statusDiv.style.display = 'block';
+        console.warn('[Pajaritos] ⚠️ Cannot submit comments: Extension context invalidated');
+        return;
+      }
+
+      // Reset abort flag when starting a new submission
+      isAborted = false;
       const selectedKey = optionSelect.value;
       if (!selectedKey || !replyOptions[selectedKey]) {
         statusDiv.textContent = 'Por favor, selecciona una opción';
@@ -2575,24 +3077,64 @@
         return;
       }
 
+      // IMPORTANT: Save form data immediately before collecting replies
+      // This ensures any text the user just typed is saved before we read it
+      try {
+        await saveFormData();
+        console.log('[Pajaritos] Form data saved before submission');
+      } catch (error) {
+        // If save fails due to invalid context, stop submission
+        if (error.message && error.message.includes('Extension context invalidated')) {
+          statusDiv.textContent = '⚠️ La extensión fue recargada. Por favor, recarga la página para continuar publicando comentarios.';
+          statusDiv.style.color = '#f02849';
+          statusDiv.style.display = 'block';
+          console.warn('[Pajaritos] ⚠️ Cannot save or submit: Extension context invalidated');
+          return;
+        }
+        // For other errors, log but continue (user might still want to submit)
+        console.error('[Pajaritos] Error saving before submission:', error);
+      }
+
       // Collect all reply inputs and checkboxes
-      const replyInputs = form.querySelectorAll('.pajaritos-reply-input');
-      const replyCheckboxes = form.querySelectorAll('.pajaritos-reply-checkbox');
+      // Re-query to ensure we have the latest DOM state
+      const replyInputs = repliesContainer.querySelectorAll('.pajaritos-reply-input');
+      const replyCheckboxes = repliesContainer.querySelectorAll('.pajaritos-reply-checkbox');
       
       // Create a map of index to checkbox state
       const checkboxStates = {};
       replyCheckboxes.forEach(checkbox => {
-        checkboxStates[checkbox.dataset.index] = checkbox.checked;
+        const idx = checkbox.dataset.index;
+        checkboxStates[idx] = checkbox.checked;
       });
       
       // Collect replies, but only include those with checked checkboxes
+      // Use DOM order (not index) to maintain the user's reordered sequence
       const replies = Array.from(replyInputs)
         .map(input => {
           const index = input.dataset.index;
+          const commentId = input.dataset.commentId;
           
-          // Check for custom image first (base64)
-          const imagePreview = repliesContainer.querySelector(`.pajaritos-image-preview[data-index="${index}"]`);
-          const addImageBtn = repliesContainer.querySelector(`.pajaritos-add-image-btn[data-index="${index}"]`);
+          // Get text value - ensure we're reading the current value
+          const textValue = input.value || '';
+          const trimmedText = textValue.trim();
+          
+          // Find image preview by both index and comment ID for reliability
+          let imagePreview = null;
+          let addImageBtn = null;
+          
+          if (commentId) {
+            // Try by comment ID first (more reliable after reordering)
+            imagePreview = repliesContainer.querySelector(`.pajaritos-image-preview[data-comment-id="${commentId}"]`);
+            addImageBtn = repliesContainer.querySelector(`.pajaritos-add-image-btn[data-comment-id="${commentId}"]`);
+          }
+          
+          // Fallback to index if not found by ID
+          if (!imagePreview) {
+            imagePreview = repliesContainer.querySelector(`.pajaritos-image-preview[data-index="${index}"]`);
+          }
+          if (!addImageBtn) {
+            addImageBtn = repliesContainer.querySelector(`.pajaritos-add-image-btn[data-index="${index}"]`);
+          }
           
           let image = null;
           let isBase64 = false;
@@ -2600,13 +3142,9 @@
           // Check if image was explicitly removed
           const imageRemoved = input.dataset.imageRemoved === 'true';
           
-          // If "Add image" button exists or image was marked as removed, don't include any image
-          if (addImageBtn || imageRemoved) {
-            // Image was removed, don't include any image
-            image = null;
-            isBase64 = false;
-          } else if (imagePreview) {
-            // Image preview exists
+          // Priority: Check for image preview first (most reliable indicator)
+          if (imagePreview) {
+            // Image preview exists - this means an image is present
             const customImage = imagePreview.dataset.customImage;
             if (customImage && customImage.trim() !== '') {
               // Custom image (base64)
@@ -2617,19 +3155,31 @@
               const imageValue = input.dataset.image;
               image = (imageValue && imageValue.trim() !== '') ? imageValue : null;
             }
+          } else if (imageRemoved) {
+            // Image was explicitly marked as removed
+            image = null;
+            isBase64 = false;
+          } else if (addImageBtn) {
+            // "Add image" button exists and no preview - no image
+            // But double-check: if this is a new comment, it might not have an image yet
+            // Only set to null if we're sure there's no image
+            image = null;
+            isBase64 = false;
           } else {
-            // No image preview and no add button - check if there was a default image
-            // But if there's no preview, it might have been removed, so check the reply config
+            // No image preview, no add button, and not marked as removed
+            // Check if there was a default image in the config
             const imageValue = input.dataset.image;
-            // Only use default image if it exists in the original config
-            // If user removed it, there should be an add button, so this case shouldn't happen
-            // But to be safe, we'll check if there's a default image
             image = (imageValue && imageValue.trim() !== '') ? imageValue : null;
+          }
+          
+          // Debug log for new comments
+          if (input.dataset.custom === 'true' && trimmedText) {
+            console.log('[Pajaritos] Collecting custom comment:', { index, commentId, text: trimmedText, hasImage: !!image });
           }
           
           return {
             index: parseInt(index),
-            text: input.value.trim(),
+            text: trimmedText,
             image: image,
             isBase64: isBase64,
             enabled: checkboxStates[index] !== false // Default to true if not found
@@ -2637,15 +3187,15 @@
         })
         .filter(reply => reply.enabled); // Only keep enabled replies
 
-      // Validate that at least one reply is enabled and has text
-      const hasText = replies.some(r => r.text);
+      // Validate that at least one reply is enabled and has text or image
+      const hasContent = replies.some(r => r.text || (r.image && r.image.trim() !== ''));
       if (replies.length === 0) {
         statusDiv.textContent = 'Por favor, selecciona al menos un comentario para publicar';
         statusDiv.style.color = '#f02849';
         return;
       }
-      if (!hasText) {
-        statusDiv.textContent = 'Por favor, ingresa texto en al menos un comentario';
+      if (!hasContent) {
+        statusDiv.textContent = 'Por favor, ingresa texto o imagen en al menos un comentario';
         statusDiv.style.color = '#f02849';
         return;
       }
@@ -2671,6 +3221,18 @@
       if (mainPostActions) {
         const buttons = mainPostActions.querySelectorAll('div[role="button"], span[role="button"], a');
         for (let i = 0; i < buttons.length; i++) {
+          // Check if aborted before clicking comment button
+          if (isAborted) {
+            console.log('[Pajaritos] Comment sending aborted by user');
+            progressDetailDiv.textContent = '❌ Envío de comentarios cancelado';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Publicar Comentarios';
+            submitBtn.style.opacity = '1';
+            statusDiv.textContent = '⚠️ Envío cancelado.';
+            statusDiv.style.color = '#f02849';
+            return;
+          }
+
           const btn = buttons[i];
           const text = btn.textContent?.toLowerCase().trim() || '';
           const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
@@ -2681,18 +3243,82 @@
               !ariaLabel.includes('responder') && !ariaLabel.includes('reply')) {
             btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
             await wait(450);
+            
+            // Check if aborted after wait
+            if (isAborted) {
+              console.log('[Pajaritos] Comment sending aborted by user');
+              progressDetailDiv.textContent = '❌ Envío de comentarios cancelado';
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Publicar Comentarios';
+              submitBtn.style.opacity = '1';
+              statusDiv.textContent = '⚠️ Envío cancelado.';
+              statusDiv.style.color = '#f02849';
+              return;
+            }
+            
             btn.click();
             await wait(3000);
+            
+            // Check if aborted after wait
+            if (isAborted) {
+              console.log('[Pajaritos] Comment sending aborted by user');
+              progressDetailDiv.textContent = '❌ Envío de comentarios cancelado';
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Publicar Comentarios';
+              submitBtn.style.opacity = '1';
+              statusDiv.textContent = '⚠️ Envío cancelado.';
+              statusDiv.style.color = '#f02849';
+              return;
+            }
+            
             commentButtonClicked = true;
             break;
           }
         }
         
         if (!commentButtonClicked && buttons.length >= 2) {
+          // Check if aborted before clicking fallback button
+          if (isAborted) {
+            console.log('[Pajaritos] Comment sending aborted by user');
+            progressDetailDiv.textContent = '❌ Envío de comentarios cancelado';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Publicar Comentarios';
+            submitBtn.style.opacity = '1';
+            statusDiv.textContent = '⚠️ Envío cancelado.';
+            statusDiv.style.color = '#f02849';
+            return;
+          }
+
           buttons[1].scrollIntoView({ behavior: 'smooth', block: 'center' });
           await wait(450);
+          
+          // Check if aborted after wait
+          if (isAborted) {
+            console.log('[Pajaritos] Comment sending aborted by user');
+            progressDetailDiv.textContent = '❌ Envío de comentarios cancelado';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Publicar Comentarios';
+            submitBtn.style.opacity = '1';
+            statusDiv.textContent = '⚠️ Envío cancelado.';
+            statusDiv.style.color = '#f02849';
+            return;
+          }
+          
           buttons[1].click();
           await wait(3000);
+          
+          // Check if aborted after wait
+          if (isAborted) {
+            console.log('[Pajaritos] Comment sending aborted by user');
+            progressDetailDiv.textContent = '❌ Envío de comentarios cancelado';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Publicar Comentarios';
+            submitBtn.style.opacity = '1';
+            statusDiv.textContent = '⚠️ Envío cancelado.';
+            statusDiv.style.color = '#f02849';
+            return;
+          }
+          
           commentButtonClicked = true;
         }
       }
@@ -2701,13 +3327,57 @@
       let successCount = 0;
       let errorCount = 0;
 
-      // Calculate total enabled replies for progress display
-      const totalEnabled = replies.length;
+      // Calculate total enabled replies WITH content (text or image) for progress display
+      const totalEnabled = replies.filter(r => {
+        const hasText = r.text && r.text.trim() !== '';
+        const hasImage = r.image && r.image.trim() !== '' && r.image !== 'null' && r.image !== 'undefined';
+        return hasText || hasImage;
+      }).length;
       let currentIndex = 0;
 
       for (let i = 0; i < replies.length; i++) {
+        // Check if extension context is still valid before each comment
+        if (!isExtensionContextValid()) {
+          console.warn('[Pajaritos] ⚠️ Extension context invalidated during submission');
+          progressDetailDiv.textContent = '❌ Error: La extensión fue recargada';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Publicar Comentarios';
+          submitBtn.style.opacity = '1';
+          statusDiv.textContent = `⚠️ La extensión fue recargada durante el envío. Por favor, recarga la página. ${successCount} comentario(s) publicado(s) antes del error.`;
+          statusDiv.style.color = '#f02849';
+          return;
+        }
+
+        // Check if aborted before each iteration
+        if (isAborted) {
+          console.log('[Pajaritos] Comment sending aborted by user');
+          progressDetailDiv.textContent = '❌ Envío de comentarios cancelado';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Publicar Comentarios';
+          submitBtn.style.opacity = '1';
+          statusDiv.textContent = `⚠️ Envío cancelado. ${successCount} comentario(s) publicado(s) antes de cancelar.`;
+          statusDiv.style.color = '#f02849';
+          return;
+        }
+
         const reply = replies[i];
-        if (!reply.text) continue; // Skip empty replies
+        
+        // Debug log to see what we're sending
+        console.log('[Pajaritos] Preparing to send reply:', {
+          index: reply.index,
+          textLength: reply.text ? reply.text.length : 0,
+          textPreview: reply.text ? reply.text.substring(0, 50) : '(empty)',
+          hasImage: !!reply.image,
+          isBase64: reply.isBase64
+        });
+        
+        // Skip replies without text AND without image (but log for debugging)
+        const hasText = reply.text && reply.text.trim() !== '';
+        const hasImage = reply.image && reply.image.trim() !== '' && reply.image !== 'null' && reply.image !== 'undefined';
+        if (!hasText && !hasImage) {
+          console.warn('[Pajaritos] Skipping empty reply (no text, no image) at index:', reply.index);
+          continue;
+        }
 
         currentIndex++;
         // Update progress
@@ -2718,6 +3388,18 @@
         // Note: postCommentWithImage will handle opening the input if needed
         // For subsequent comments, we need to click the comment button again
         if (i > 0 || !commentButtonClicked) {
+          // Check if aborted before opening comment box
+          if (isAborted) {
+            console.log('[Pajaritos] Comment sending aborted by user');
+            progressDetailDiv.textContent = '❌ Envío de comentarios cancelado';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Publicar Comentarios';
+            submitBtn.style.opacity = '1';
+            statusDiv.textContent = `⚠️ Envío cancelado. ${successCount} comentario(s) publicado(s) antes de cancelar.`;
+            statusDiv.style.color = '#f02849';
+            return;
+          }
+
           progressDetailDiv.textContent = 'Abriendo caja de comentarios...';
           // Click comment button again for subsequent comments
           if (mainPostActions) {
@@ -2732,12 +3414,50 @@
                   !ariaLabel.includes('responder') && !ariaLabel.includes('reply')) {
                 btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 await wait(450);
+                
+                // Check if aborted after wait
+                if (isAborted) {
+                  console.log('[Pajaritos] Comment sending aborted by user');
+                  progressDetailDiv.textContent = '❌ Envío de comentarios cancelado';
+                  submitBtn.disabled = false;
+                  submitBtn.textContent = 'Publicar Comentarios';
+                  submitBtn.style.opacity = '1';
+                  statusDiv.textContent = `⚠️ Envío cancelado. ${successCount} comentario(s) publicado(s) antes de cancelar.`;
+                  statusDiv.style.color = '#f02849';
+                  return;
+                }
+
                 btn.click();
                 await wait(3000);
+                
+                // Check if aborted after wait
+                if (isAborted) {
+                  console.log('[Pajaritos] Comment sending aborted by user');
+                  progressDetailDiv.textContent = '❌ Envío de comentarios cancelado';
+                  submitBtn.disabled = false;
+                  submitBtn.textContent = 'Publicar Comentarios';
+                  submitBtn.style.opacity = '1';
+                  statusDiv.textContent = `⚠️ Envío cancelado. ${successCount} comentario(s) publicado(s) antes de cancelar.`;
+                  statusDiv.style.color = '#f02849';
+                  return;
+                }
+
                 break;
               }
             }
           }
+        }
+
+        // Check if aborted before posting comment
+        if (isAborted) {
+          console.log('[Pajaritos] Comment sending aborted by user');
+          progressDetailDiv.textContent = '❌ Envío de comentarios cancelado';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Publicar Comentarios';
+          submitBtn.style.opacity = '1';
+          statusDiv.textContent = `⚠️ Envío cancelado. ${successCount} comentario(s) publicado(s) antes de cancelar.`;
+          statusDiv.style.color = '#f02849';
+          return;
         }
 
         // Create progress callback
@@ -2752,20 +3472,51 @@
                               : null;
         const isBase64Image = reply.isBase64 || false;
         
-        const result = await postCommentWithImage(reply.text, imageToUpload, postElement, updateProgress, isBase64Image);
+        const result = await postCommentWithImage(reply.text, imageToUpload, postElement, updateProgress, isBase64Image, () => isAborted);
+
+        // Check if aborted after posting comment or if result indicates abort
+        if (isAborted || (result && result.aborted)) {
+          console.log('[Pajaritos] Comment sending aborted by user');
+          progressDetailDiv.textContent = '❌ Envío de comentarios cancelado';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Publicar Comentarios';
+          submitBtn.style.opacity = '1';
+          statusDiv.textContent = `⚠️ Envío cancelado. ${successCount} comentario(s) publicado(s) antes de cancelar.`;
+          statusDiv.style.color = '#f02849';
+          return;
+        }
 
         if (result.success) {
           successCount++;
           progressDetailDiv.textContent = `✅ Comentario ${i + 1} publicado exitosamente`;
-          // Notify extension popup
-          chrome.runtime.sendMessage({
-            type: 'comment_success',
-            message: reply.text
-          });
+          // Notify extension popup (only if context is still valid)
+          if (isExtensionContextValid()) {
+            try {
+              chrome.runtime.sendMessage({
+                type: 'comment_success',
+                message: reply.text
+              });
+            } catch (error) {
+              // Silently fail if context is invalid - don't break the flow
+              console.warn('[Pajaritos] Could not send success message:', error.message);
+            }
+          }
           
           // Wait a bit before posting next comment
           if (i < replies.length - 1) {
             await wait(1500);
+            
+            // Check if aborted after wait
+            if (isAborted) {
+              console.log('[Pajaritos] Comment sending aborted by user');
+              progressDetailDiv.textContent = '❌ Envío de comentarios cancelado';
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Publicar Comentarios';
+              submitBtn.style.opacity = '1';
+              statusDiv.textContent = `⚠️ Envío cancelado. ${successCount} comentario(s) publicado(s) antes de cancelar.`;
+              statusDiv.style.color = '#f02849';
+              return;
+            }
           }
         } else {
           errorCount++;
@@ -2800,7 +3551,7 @@
   }
 
   // Post comment with optional image
-  async function postCommentWithImage(commentText, imagePath, postElement, progressCallback, isBase64 = false) {
+  async function postCommentWithImage(commentText, imagePath, postElement, progressCallback, isBase64 = false, abortCheck = null) {
     // Wait for the input to appear (it might take a moment after clicking the comment button)
     let input = null;
     let attempts = 0;
@@ -2809,6 +3560,12 @@
     if (progressCallback) progressCallback('Buscando campo de comentario...');
     console.log('[Pajaritos] Waiting for comment input to appear...');
     while (!input && attempts < maxAttempts) {
+      // Check if aborted
+      if (abortCheck && abortCheck()) {
+        console.log('[Pajaritos] Comment posting aborted');
+        return { success: false, error: 'Aborted by user', aborted: true };
+      }
+
       input = findCommentInput(postElement);
       if (!input) {
         console.log(`[Pajaritos] Input not found yet, attempt ${attempts + 1}/${maxAttempts}`);
@@ -2827,20 +3584,45 @@
     }
 
     try {
+      // Check if aborted before starting
+      if (abortCheck && abortCheck()) {
+        console.log('[Pajaritos] Comment posting aborted');
+        return { success: false, error: 'Aborted by user', aborted: true };
+      }
+
       // Focus the input to open the comment box
       // NEVER click the input - it triggers file dialog
       if (progressCallback) progressCallback('Abriendo campo de comentario...');
       input.focus();
       await wait(750); // Wait for comment box to open
       
+      // Check if aborted after wait
+      if (abortCheck && abortCheck()) {
+        console.log('[Pajaritos] Comment posting aborted');
+        return { success: false, error: 'Aborted by user', aborted: true };
+      }
+      
       // Don't click the input - just focus it to avoid triggering file dialog
 
       // If there's an image, upload it first
       // Double-check that imagePath is not null, undefined, or empty string
       if (imagePath && imagePath.trim() !== '' && imagePath !== 'null' && imagePath !== 'undefined') {
+        // Check if aborted before uploading image
+        if (abortCheck && abortCheck()) {
+          console.log('[Pajaritos] Comment posting aborted');
+          return { success: false, error: 'Aborted by user', aborted: true };
+        }
+
         if (progressCallback) progressCallback(`📷 Subiendo imagen${isBase64 ? ' (personalizada)' : ''}...`);
         console.log('[Pajaritos] 📷 Uploading image:', isBase64 ? 'base64 image' : imagePath);
         const imageUploaded = await uploadImageToComment(input, imagePath, progressCallback, isBase64);
+        
+        // Check if aborted after image upload
+        if (abortCheck && abortCheck()) {
+          console.log('[Pajaritos] Comment posting aborted');
+          return { success: false, error: 'Aborted by user', aborted: true };
+        }
+
         if (!imageUploaded) {
           console.log('[Pajaritos] ⚠️ Image upload failed, continuing with text only');
           if (progressCallback) progressCallback('⚠️ Error al subir imagen, continuando solo con texto...');
@@ -2848,9 +3630,21 @@
           console.log('[Pajaritos] ✅ Image uploaded successfully');
           if (progressCallback) progressCallback('✅ Imagen subida, procesando...');
           await wait(3000); // Wait for image to process
+          
+          // Check if aborted after wait
+          if (abortCheck && abortCheck()) {
+            console.log('[Pajaritos] Comment posting aborted');
+            return { success: false, error: 'Aborted by user', aborted: true };
+          }
         }
       } else {
         console.log('[Pajaritos] No image to upload, skipping image upload step');
+      }
+
+      // Check if aborted before writing text
+      if (abortCheck && abortCheck()) {
+        console.log('[Pajaritos] Comment posting aborted');
+        return { success: false, error: 'Aborted by user', aborted: true };
       }
 
       // Clear any existing content
@@ -2862,6 +3656,12 @@
         input.value = '';
       }
       await wait(300);
+      
+      // Check if aborted after wait
+      if (abortCheck && abortCheck()) {
+        console.log('[Pajaritos] Comment posting aborted');
+        return { success: false, error: 'Aborted by user', aborted: true };
+      }
 
       // Set the text content
       if (input.contentEditable === 'true') {
@@ -2895,6 +3695,12 @@
       }
 
       await wait(1500);
+      
+      // Check if aborted before submitting
+      if (abortCheck && abortCheck()) {
+        console.log('[Pajaritos] Comment posting aborted');
+        return { success: false, error: 'Aborted by user', aborted: true };
+      }
       
       // Find and click the submit button
       if (progressCallback) progressCallback('Publicando comentario...');
@@ -2970,13 +3776,100 @@
       if (submitButton) {
         submitButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
         await wait(450);
+        
+        // Check if aborted before clicking submit
+        if (abortCheck && abortCheck()) {
+          console.log('[Pajaritos] Comment posting aborted');
+          return { success: false, error: 'Aborted by user', aborted: true };
+        }
+        
+        // Store the input content before clicking to verify it gets cleared
+        const inputContentBefore = input.textContent?.trim() || input.value?.trim() || '';
+        
         submitButton.click();
-        console.log('[Pajaritos] ✅ Comment posted via submit button');
-        await wait(3000);
+        console.log('[Pajaritos] Clicked submit button, verifying comment was posted...');
+        
+        // Wait and verify the comment was actually posted
+        // Check multiple times over a period to catch delayed submissions
+        let verified = false;
+        const maxVerificationAttempts = 10;
+        const verificationDelay = 500; // Check every 500ms
+        
+        for (let attempt = 0; attempt < maxVerificationAttempts; attempt++) {
+          await wait(verificationDelay);
+          
+          // Check if aborted during verification
+          if (abortCheck && abortCheck()) {
+            console.log('[Pajaritos] Comment posting aborted');
+            return { success: false, error: 'Aborted by user', aborted: true };
+          }
+          
+          // Check if input was cleared (Facebook clears it after successful submission)
+          const inputContentAfter = input.textContent?.trim() || input.value?.trim() || '';
+          const inputCleared = inputContentAfter === '' || inputContentAfter.length < inputContentBefore.length;
+          
+          // Also check if the comment text appears in the comments section
+          // This is a more reliable indicator that the comment was actually posted
+          const commentTextLower = commentText.toLowerCase().substring(0, 50); // First 50 chars for matching
+          const allComments = postElement.querySelectorAll('[data-testid*="comment"], [role="article"]');
+          let commentFound = false;
+          
+          for (const comment of allComments) {
+            const commentTextContent = comment.textContent?.toLowerCase() || '';
+            // Check if this comment contains our text (with some flexibility for formatting)
+            if (commentTextContent.includes(commentTextLower) || 
+                commentTextLower.split(' ').slice(0, 5).every(word => commentTextContent.includes(word))) {
+              commentFound = true;
+              break;
+            }
+          }
+          
+          // Verify success: input cleared OR comment found in DOM
+          if (inputCleared || commentFound) {
+            verified = true;
+            console.log('[Pajaritos] ✅ Comment verified as posted');
+            break;
+          }
+          
+          // Also check if submit button is disabled (indicates submission in progress or completed)
+          if (submitButton && (submitButton.disabled || submitButton.getAttribute('aria-disabled') === 'true')) {
+            // Button is disabled, likely submitted - but wait a bit more to be sure
+            if (attempt >= 3) { // After 1.5 seconds of disabled button
+              verified = true;
+              console.log('[Pajaritos] ✅ Submit button disabled, assuming comment posted');
+              break;
+            }
+          }
+        }
+        
+        if (!verified) {
+          console.log('[Pajaritos] ⚠️ Could not verify comment was posted - input may still contain text');
+          // Check if input still has the text (comment wasn't posted)
+          const inputContentAfter = input.textContent?.trim() || input.value?.trim() || '';
+          if (inputContentAfter && inputContentAfter.length > 0 && 
+              (inputContentAfter === commentText || inputContentAfter.includes(commentText.substring(0, 20)))) {
+            console.log('[Pajaritos] ❌ Comment text still in input field - submission likely failed');
+            return { success: false, error: 'Comment submission failed - text still in input field' };
+          }
+          // If input is cleared but we couldn't find the comment, it might still be processing
+          // Return success but log a warning
+          console.log('[Pajaritos] ⚠️ Input cleared but comment not found in DOM - may still be processing');
+        }
+        
         return { success: true };
       } else {
+        // Check if aborted before fallback Enter key
+        if (abortCheck && abortCheck()) {
+          console.log('[Pajaritos] Comment posting aborted');
+          return { success: false, error: 'Aborted by user', aborted: true };
+        }
+
         // Fallback: try pressing Enter
         console.log('[Pajaritos] ⚠️ Submit button not found, trying Enter key');
+        
+        // Store the input content before pressing Enter to verify it gets cleared
+        const inputContentBefore = input.textContent?.trim() || input.value?.trim() || '';
+        
         const enterEvent = new KeyboardEvent('keydown', {
           key: 'Enter',
           code: 'Enter',
@@ -2986,7 +3879,65 @@
           cancelable: true
         });
         input.dispatchEvent(enterEvent);
-        await wait(3000);
+        console.log('[Pajaritos] Pressed Enter key, verifying comment was posted...');
+        
+        // Wait and verify the comment was actually posted
+        // Check multiple times over a period to catch delayed submissions
+        let verified = false;
+        const maxVerificationAttempts = 10;
+        const verificationDelay = 500; // Check every 500ms
+        
+        for (let attempt = 0; attempt < maxVerificationAttempts; attempt++) {
+          await wait(verificationDelay);
+          
+          // Check if aborted during verification
+          if (abortCheck && abortCheck()) {
+            console.log('[Pajaritos] Comment posting aborted');
+            return { success: false, error: 'Aborted by user', aborted: true };
+          }
+          
+          // Check if input was cleared (Facebook clears it after successful submission)
+          const inputContentAfter = input.textContent?.trim() || input.value?.trim() || '';
+          const inputCleared = inputContentAfter === '' || inputContentAfter.length < inputContentBefore.length;
+          
+          // Also check if the comment text appears in the comments section
+          // This is a more reliable indicator that the comment was actually posted
+          const commentTextLower = commentText.toLowerCase().substring(0, 50); // First 50 chars for matching
+          const allComments = postElement.querySelectorAll('[data-testid*="comment"], [role="article"]');
+          let commentFound = false;
+          
+          for (const comment of allComments) {
+            const commentTextContent = comment.textContent?.toLowerCase() || '';
+            // Check if this comment contains our text (with some flexibility for formatting)
+            if (commentTextContent.includes(commentTextLower) || 
+                commentTextLower.split(' ').slice(0, 5).every(word => commentTextContent.includes(word))) {
+              commentFound = true;
+              break;
+            }
+          }
+          
+          // Verify success: input cleared OR comment found in DOM
+          if (inputCleared || commentFound) {
+            verified = true;
+            console.log('[Pajaritos] ✅ Comment verified as posted');
+            break;
+          }
+        }
+        
+        if (!verified) {
+          console.log('[Pajaritos] ⚠️ Could not verify comment was posted - input may still contain text');
+          // Check if input still has the text (comment wasn't posted)
+          const inputContentAfter = input.textContent?.trim() || input.value?.trim() || '';
+          if (inputContentAfter && inputContentAfter.length > 0 && 
+              (inputContentAfter === commentText || inputContentAfter.includes(commentText.substring(0, 20)))) {
+            console.log('[Pajaritos] ❌ Comment text still in input field - submission likely failed');
+            return { success: false, error: 'Comment submission failed - text still in input field' };
+          }
+          // If input is cleared but we couldn't find the comment, it might still be processing
+          // Return success but log a warning
+          console.log('[Pajaritos] ⚠️ Input cleared but comment not found in DOM - may still be processing');
+        }
+        
         return { success: true };
       }
     } catch (error) {
@@ -3097,7 +4048,7 @@
       } else {
         // Load image from extension
         if (progressCallback) progressCallback('Cargando imagen desde la extensión...');
-        const imageUrl = chrome.runtime.getURL(`images/${imagePath}`);
+        const imageUrl = safeGetExtensionURL(`images/${imagePath}`);
         const response = await fetch(imageUrl);
         const blob = await response.blob();
         file = new File([blob], imagePath, { type: blob.type });

@@ -1,6 +1,6 @@
-// Control Natalidad option configuration
+// Control de Natalidad option configuration
 var REPLY_OPTION_CONTROL_NATALIDAD = {
-  name: 'Control Natalidad',
+  name: 'Control de Natalidad',
   replies: [
   {
     id: 'control_natalidad_1',

@@ -32,7 +32,7 @@ var REPLY_OPTION_GORRION = {
         },
         {
           id: 'gorrion_pichon_6',
-          text: 'Mientras tanto te paso sus cuidados, ponela en alguna cajita donde pueda estar segura y tranquila, te paso un ejemplo',
+          text: 'Mientras esté bajo tu cuidado, necesitará un espacio seguro donde reposar. Para esto, utilizaremos una caja de cartón con una malla adaptada a modo de jaula, para así evitar que salga de la caja y se lastime o se pierda. En el fondo colocaremos papeles de cocina para que sea confortable y fácil de limpiar, ya que solamente tendremos contacto con el ave al momento de alimentarla e higienizar su espacio.\n\n\n\nEs importante evitar el uso de jaulas convencionales, ya que estas dañan el plumaje de las aves y pueden provocar fracturas en alas y patas. También podemos usar cajas de plástico o transportadoras de animales.',
           image: 'caja_jaula.png'
         },
         {
@@ -77,7 +77,7 @@ var REPLY_OPTION_GORRION = {
         },
         {
           id: 'gorrion_adulto_6',
-          text: 'Mientras tanto te paso sus cuidados, ponela en alguna cajita donde pueda estar segura y tranquila, te paso un ejemplo',
+          text: 'Mientras esté bajo tu cuidado, necesitará un espacio seguro donde reposar. Para esto, utilizaremos una caja de cartón con una malla adaptada a modo de jaula, para así evitar que salga de la caja y se lastime o se pierda. En el fondo colocaremos papeles de cocina para que sea confortable y fácil de limpiar, ya que solamente tendremos contacto con el ave al momento de alimentarla e higienizar su espacio.\n\n\n\nEs importante evitar el uso de jaulas convencionales, ya que estas dañan el plumaje de las aves y pueden provocar fracturas en alas y patas. También podemos usar cajas de plástico o transportadoras de animales.',
           image: 'caja_jaula.png'
         },
         {
