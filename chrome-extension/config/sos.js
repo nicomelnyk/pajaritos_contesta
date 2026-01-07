@@ -6,6 +6,11 @@ var REPLY_OPTION_SOS = {
     id: 'sos_1',
     text: '',
     image: 'sos_1.png'
+  },
+  {
+    id: 'sos_2',
+    text: '',
+    image: 'sos_2.png'
   }
   ]
 };

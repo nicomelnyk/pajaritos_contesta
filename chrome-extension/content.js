@@ -799,19 +799,49 @@
     const replyBtn = document.createElement('div');
     replyBtn.className = 'pajaritos-reply-btn';
     const iconUrl = safeGetExtensionURL('icon48.png');
-    replyBtn.innerHTML = `<img src="${iconUrl}" alt="🐦" style="width: 28px; height: 28px; display: block;" />`;
-    replyBtn.style.cssText = `
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 4px 6px;
-      margin-left: 8px;
-      background: #e0e0e0;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.2s;
-      z-index: 10000;
-    `;
+    
+    // If extension context is invalid (empty URL), use emoji directly
+    if (!iconUrl || iconUrl === '') {
+      replyBtn.textContent = '🐦';
+      replyBtn.style.cssText = `
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px 6px;
+        margin-left: 8px;
+        background: #e0e0e0;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.2s;
+        font-size: 20px;
+        z-index: 10000;
+      `;
+    } else {
+      const img = document.createElement('img');
+      img.src = iconUrl;
+      img.alt = '🐦';
+      img.style.cssText = 'width: 28px; height: 28px; display: block;';
+      img.onerror = function() {
+        // Fallback to emoji if image fails to load
+        this.style.display = 'none';
+        const emoji = document.createTextNode('🐦');
+        this.parentNode.insertBefore(emoji, this);
+        this.parentNode.style.fontSize = '20px';
+      };
+      replyBtn.appendChild(img);
+      replyBtn.style.cssText = `
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px 6px;
+        margin-left: 8px;
+        background: #e0e0e0;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.2s;
+        z-index: 10000;
+      `;
+    }
     
     replyBtn.addEventListener('mouseenter', () => {
       replyBtn.style.background = '#d0d0d0';
@@ -1237,18 +1267,47 @@
     const replyBtn = document.createElement('div');
     replyBtn.className = 'pajaritos-reply-btn';
     const iconUrl = safeGetExtensionURL('icon48.png');
-    replyBtn.innerHTML = `<img src="${iconUrl}" alt="🐦" style="width: 28px; height: 28px; display: block;" />`;
-    replyBtn.style.cssText = `
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 4px 6px;
-      margin-left: 8px;
-      background: #e0e0e0;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.2s;
-    `;
+    
+    // If extension context is invalid (empty URL), use emoji directly
+    if (!iconUrl || iconUrl === '') {
+      replyBtn.textContent = '🐦';
+      replyBtn.style.cssText = `
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px 6px;
+        margin-left: 8px;
+        background: #e0e0e0;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.2s;
+        font-size: 20px;
+      `;
+    } else {
+      const img = document.createElement('img');
+      img.src = iconUrl;
+      img.alt = '🐦';
+      img.style.cssText = 'width: 28px; height: 28px; display: block;';
+      img.onerror = function() {
+        // Fallback to emoji if image fails to load
+        this.style.display = 'none';
+        const emoji = document.createTextNode('🐦');
+        this.parentNode.insertBefore(emoji, this);
+        this.parentNode.style.fontSize = '20px';
+      };
+      replyBtn.appendChild(img);
+      replyBtn.style.cssText = `
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px 6px;
+        margin-left: 8px;
+        background: #e0e0e0;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.2s;
+      `;
+    }
 
     replyBtn.addEventListener('mouseenter', () => {
       replyBtn.style.background = '#d0d0d0';
@@ -4094,7 +4153,8 @@
                                     parentArticle.querySelector('div[contenteditable="true"][aria-label*="Comentar como"]') !== null ||
                                     parentArticle.querySelector('div[contenteditable="true"][aria-label*="Responde como"]') !== null ||
                                     parentArticle.querySelector('div[contenteditable="true"][aria-label*="Comenta como"]') !== null ||
-                                    parentArticle.querySelector('div[contenteditable="true"][aria-label*="Comentas como"]') !== null;
+                                    parentArticle.querySelector('div[contenteditable="true"][aria-label*="Comentas como"]') !== null ||
+                                    parentArticle.querySelector('div[contenteditable="true"][aria-label*="Envía tu primer"]') !== null;
       
       if (parentHasCommentInput) {
         // This element is nested inside a post that has a comment input, so it's likely shared content
@@ -4104,7 +4164,8 @@
                                    element.querySelector('div[contenteditable="true"][aria-label*="Comentar como"]') !== null ||
                                    element.querySelector('div[contenteditable="true"][aria-label*="Responde como"]') !== null ||
                                    element.querySelector('div[contenteditable="true"][aria-label*="Comenta como"]') !== null ||
-                                   element.querySelector('div[contenteditable="true"][aria-label*="Comentas como"]') !== null;
+                                   element.querySelector('div[contenteditable="true"][aria-label*="Comentas como"]') !== null ||
+                                   element.querySelector('div[contenteditable="true"][aria-label*="Envía tu primer"]') !== null;
         
         if (!hasOwnCommentInput) {
           // It's shared content - it's nested in a post but doesn't have its own comment input
@@ -4237,7 +4298,7 @@
     
     // Also check for "Responder como..." or "Comentar como..." but only if it's NOT in a comment reply structure
     if (!hasMainPostInput) {
-      const responderInputs = element.querySelectorAll('div[contenteditable="true"][aria-label*="Responder como"], div[contenteditable="true"][aria-placeholder*="Responder como"], div[contenteditable="true"][aria-label*="Comentar como"], div[contenteditable="true"][aria-placeholder*="Comentar como"], div[contenteditable="true"][aria-label*="Responde como"], div[contenteditable="true"][aria-placeholder*="Responde como"], div[contenteditable="true"][aria-label*="Comenta como"], div[contenteditable="true"][aria-placeholder*="Comenta como"], div[contenteditable="true"][aria-label*="Comentas como"], div[contenteditable="true"][aria-placeholder*="Comentas como"]');
+      const responderInputs = element.querySelectorAll('div[contenteditable="true"][aria-label*="Responder como"], div[contenteditable="true"][aria-placeholder*="Responder como"], div[contenteditable="true"][aria-label*="Comentar como"], div[contenteditable="true"][aria-placeholder*="Comentar como"], div[contenteditable="true"][aria-label*="Responde como"], div[contenteditable="true"][aria-placeholder*="Responde como"], div[contenteditable="true"][aria-label*="Comenta como"], div[contenteditable="true"][aria-placeholder*="Comenta como"], div[contenteditable="true"][aria-label*="Comentas como"], div[contenteditable="true"][aria-placeholder*="Comentas como"], div[contenteditable="true"][aria-label*="Envía tu primer"], div[contenteditable="true"][aria-placeholder*="Envía tu primer"]');
       for (const input of responderInputs) {
         // Check if it's in a comment reply structure
         const isInReply = input.closest('[aria-label*="Responder"], [aria-label*="Reply"]') !== input &&
@@ -5434,7 +5495,7 @@
         // IMPORTANT: "Responder como..." or "Comentar como..." can be main post input OR comment reply input
         // We need to check if it's NOT nested in a comment reply structure
         (() => {
-          const responderInputs = post.querySelectorAll('div[contenteditable="true"][aria-label*="Responder como"], div[contenteditable="true"][aria-placeholder*="Responder como"], div[contenteditable="true"][aria-label*="Comentar como"], div[contenteditable="true"][aria-placeholder*="Comentar como"], div[contenteditable="true"][aria-label*="Responde como"], div[contenteditable="true"][aria-placeholder*="Responde como"], div[contenteditable="true"][aria-label*="Comenta como"], div[contenteditable="true"][aria-placeholder*="Comenta como"], div[contenteditable="true"][aria-label*="Comentas como"], div[contenteditable="true"][aria-placeholder*="Comentas como"]');
+          const responderInputs = post.querySelectorAll('div[contenteditable="true"][aria-label*="Responder como"], div[contenteditable="true"][aria-placeholder*="Responder como"], div[contenteditable="true"][aria-label*="Comentar como"], div[contenteditable="true"][aria-placeholder*="Comentar como"], div[contenteditable="true"][aria-label*="Responde como"], div[contenteditable="true"][aria-placeholder*="Responde como"], div[contenteditable="true"][aria-label*="Comenta como"], div[contenteditable="true"][aria-placeholder*="Comenta como"], div[contenteditable="true"][aria-label*="Comentas como"], div[contenteditable="true"][aria-placeholder*="Comentas como"], div[contenteditable="true"][aria-label*="Envía tu primer"], div[contenteditable="true"][aria-placeholder*="Envía tu primer"]');
           for (const input of responderInputs) {
             // STRICT CHECK: The input's closest article must be the post itself (not nested)
             const inputArticle = input.closest('div[role="article"]');

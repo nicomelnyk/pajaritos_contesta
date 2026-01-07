@@ -1,6 +1,23 @@
 // Popup script for showing success notifications
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Set icon path using chrome.runtime.getURL
+  const iconElement = document.getElementById('popup-icon');
+  if (iconElement) {
+    try {
+      const iconUrl = chrome.runtime.getURL('icon48.png');
+      iconElement.src = iconUrl;
+      iconElement.onerror = function() {
+        // Fallback to emoji if image fails to load
+        this.style.display = 'none';
+        const emoji = document.createTextNode('🐦');
+        this.parentNode.insertBefore(emoji, this);
+      };
+    } catch (error) {
+      console.error('Error loading icon:', error);
+    }
+  }
+
   const statusList = document.getElementById('statusList');
   const clearBtn = document.getElementById('clearBtn');
 
@@ -13,7 +30,8 @@ document.addEventListener('DOMContentLoaded', () => {
         statusList.innerHTML = `
           <div style="color: #65676b; font-size: 13px; text-align: center; padding: 20px 0;">
             Aún no se publicaron comentarios.<br>
-            ¡Hacé clic en "🐦" en cualquier post de Facebook para comenzar!
+            ¡Hacé clic en "🐦" en cualquier post de Facebook para comenzar!<br>
+            El botón se ve cuando seleccionan "Comentar" en una publicación
           </div>
         `;
         clearBtn.style.display = 'none';
@@ -61,8 +79,8 @@ document.addEventListener('DOMContentLoaded', () => {
           timestamp: Date.now()
         });
         
-        // Keep only last 50 items
-        if (history.length > 50) {
+        // Keep only last 1000 items
+        if (history.length > 1000) {
           history.shift();
         }
         
