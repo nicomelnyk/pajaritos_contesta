@@ -882,7 +882,7 @@
       showReplyForm(postElement, replyBtn);
     });
     
-    // Insert button
+      // Insert button
     try {
       // Try to insert after the input or in the container
       if (insertTarget === commentInput.parentElement) {
@@ -895,15 +895,35 @@
         console.log('[Pajaritos] ✅ Button inserted in container');
       }
       
-      // Verify button is in DOM
-      setTimeout(() => {
-        const btnInDom = document.querySelector('.pajaritos-reply-btn');
-        if (btnInDom) {
+      // Verify the specific button we just inserted is in the DOM
+      // Check immediately and also after a short delay (in case Facebook's code modifies DOM)
+      const verifyButton = () => {
+        // Check if our specific button is connected to the DOM
+        const isInDom = replyBtn.isConnected || document.contains(replyBtn);
+        // Also check if it's in the expected parent
+        const isInExpectedParent = insertTarget.contains(replyBtn) || 
+                                   (insertTarget === commentInput.parentElement && 
+                                    commentInput.nextSibling === replyBtn);
+        
+        if (isInDom && isInExpectedParent) {
           console.log('[Pajaritos] ✅ Button verified in DOM');
+        } else if (isInDom) {
+          // Button is in DOM but maybe moved by Facebook's code
+          console.warn('[Pajaritos] ⚠️ Button is in DOM but not in expected location');
         } else {
-          console.error('[Pajaritos] ❌ Button NOT found in DOM after insertion!');
+          console.error('[Pajaritos] ❌ Button NOT found in DOM after insertion!', {
+            isConnected: replyBtn.isConnected,
+            parentNode: replyBtn.parentNode,
+            insertTarget: insertTarget
+          });
         }
-      }, 100);
+      };
+      
+      // Verify immediately
+      verifyButton();
+      
+      // Also verify after a short delay in case Facebook's code modifies the DOM
+      setTimeout(verifyButton, 100);
       
       return true;
     } catch (e) {
@@ -2126,9 +2146,12 @@
           replyImage = reply.image || '';
           defaultImageUrl = reply.image ? safeGetExtensionURL(`images/${reply.image}`) : null;
           
-          // Try to get saved data by ID first, then by index (for backward compatibility)
+          // Use originalIndex for backward-compatible lookups (not visual index)
+          const origIdx = commentData.originalIndex;
+          
+          // Try to get saved data by ID first, then by originalIndex (for backward compatibility)
           const savedTextById = savedData?.textsById?.[commentId];
-          const savedTextByIndex = savedData?.texts?.[index.toString()] || savedData?.texts?.[index];
+          const savedTextByIndex = savedData?.texts?.[origIdx.toString()] || savedData?.texts?.[origIdx];
           const savedText = savedTextById || savedTextByIndex;
           
           // Determine if comment was edited: if saved text exists and differs from config text
@@ -2137,22 +2160,22 @@
           // Use saved text if it was edited, otherwise use config text (allows auto-updates)
           displayText = wasEdited ? savedText : reply.text;
           
-          // Checkbox state: try by ID first, then by index
+          // Checkbox state: try by ID first, then by originalIndex
           const savedCheckedById = savedData?.checkboxesById?.[commentId];
-          const savedCheckedByIndex = savedData?.checkboxes?.[index.toString()] !== undefined 
-                             ? savedData.checkboxes[index.toString()] 
-                             : (savedData?.checkboxes?.[index] !== undefined ? savedData.checkboxes[index] : true);
+          const savedCheckedByIndex = savedData?.checkboxes?.[origIdx.toString()] !== undefined 
+                             ? savedData.checkboxes[origIdx.toString()] 
+                             : (savedData?.checkboxes?.[origIdx] !== undefined ? savedData.checkboxes[origIdx] : true);
           savedChecked = savedCheckedById !== undefined ? savedCheckedById : savedCheckedByIndex;
           
-          // Check if image was removed: try by ID first, then by index
+          // Check if image was removed: try by ID first, then by originalIndex
           const imageRemovedById = savedData?.imagesRemovedById?.[commentId] === true;
-          const imageRemovedByIndex = savedData?.imagesRemoved?.[index.toString()] === true || 
-                                 savedData?.imagesRemoved?.[index] === true;
+          const imageRemovedByIndex = savedData?.imagesRemoved?.[origIdx.toString()] === true || 
+                                 savedData?.imagesRemoved?.[origIdx] === true;
           imageWasRemoved = imageRemovedById || imageRemovedByIndex;
           
-          // Use custom image: try by ID first, then by index
+          // Use custom image: try by ID first, then by originalIndex
           const savedCustomImageById = savedData?.imagesById?.[commentId] || null;
-          const savedCustomImageByIndex = savedData?.images?.[index.toString()] || savedData?.images?.[index] || null;
+          const savedCustomImageByIndex = savedData?.images?.[origIdx.toString()] || savedData?.images?.[origIdx] || null;
           savedCustomImage = savedCustomImageById || savedCustomImageByIndex;
           isCustomImage = savedCustomImage !== null;
         } else {
@@ -2538,59 +2561,29 @@
         }
       }
 
-      // Function to setup image button event listeners
+      // Function to setup image file input event listeners
+      // Note: Button clicks are handled by event delegation in setupNewCommentListeners()
       function setupImageButtons() {
-        // Remove old listeners by cloning and re-adding
         const newImageInputs = repliesContainer.querySelectorAll('.pajaritos-image-input');
-        const newChangeBtns = repliesContainer.querySelectorAll('.pajaritos-change-image-btn');
-        const newRemoveBtns = repliesContainer.querySelectorAll('.pajaritos-remove-image-btn');
-        const newAddBtns = repliesContainer.querySelectorAll('.pajaritos-add-image-btn');
 
-        // Change image button
-        newChangeBtns.forEach(btn => {
-          btn.onclick = () => {
-            const index = btn.dataset.index;
-            const input = repliesContainer.querySelector(`.pajaritos-image-input[data-index="${index}"]`);
-            if (input) {
-              input.click();
-            }
-          };
-        });
-
-        // Remove image button
-        newRemoveBtns.forEach(btn => {
-          btn.onclick = () => {
-            const index = btn.dataset.index;
-            removeImagePreview(index);
-            saveFormData();
-          };
-        });
-
-        // Add image button
-        newAddBtns.forEach(btn => {
-          btn.onclick = () => {
-            const index = btn.dataset.index;
-            const input = repliesContainer.querySelector(`.pajaritos-image-input[data-index="${index}"]`);
-            if (input) {
-              input.click();
-            }
-          };
-        });
-
-        // File input change
+        // File input change - this can't be delegated, needs direct handler
         newImageInputs.forEach(input => {
-          input.onchange = async (e) => {
+          // Only add handler if not already added (check for marker)
+          if (input.dataset.handlerAdded === 'true') return;
+          input.dataset.handlerAdded = 'true';
+          
+          input.addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (file) {
               try {
                 const base64 = await imageToBase64(file);
-                const index = input.dataset.index;
-                if (!index || index === 'undefined' || index === 'null') {
-                  console.error('[Pajaritos] Invalid index from input:', input, 'dataset:', input.dataset);
+                const commentId = input.dataset.commentId;
+                if (!commentId) {
+                  console.error('[Pajaritos] Invalid commentId from input:', input, 'dataset:', input.dataset);
                   alert('Error: No se pudo identificar el comentario. Por favor, recarga el formulario.');
                   return;
                 }
-                updateImagePreview(index, base64);
+                updateImagePreviewByCommentId(commentId, base64);
                 saveFormData();
               } catch (error) {
                 console.error('[Pajaritos] Error converting image:', error);
@@ -2599,33 +2592,97 @@
             }
             // Reset input so same file can be selected again
             input.value = '';
-          };
+          });
         });
+      }
+      
+      // Helper to update image preview by commentId instead of index
+      function updateImagePreviewByCommentId(commentId, base64) {
+        const item = repliesContainer.querySelector(`.pajaritos-reply-item[data-comment-id="${commentId}"]`);
+        if (!item) {
+          console.error('[Pajaritos] Could not find item for commentId:', commentId);
+          return;
+        }
         
-        // Setup download image buttons
-        const downloadBtns = repliesContainer.querySelectorAll('.pajaritos-download-image-btn');
-        downloadBtns.forEach(btn => {
-          btn.onclick = () => {
-            const imageUrl = btn.dataset.imageUrl;
-            const input = repliesContainer.querySelector(`.pajaritos-reply-input[data-index="${btn.dataset.index}"]`);
-            const commentId = input ? input.dataset.commentId : null;
-            if (imageUrl) {
-              downloadImage(imageUrl, commentId);
-            }
-          };
-        });
+        const input = item.querySelector('.pajaritos-reply-input');
+        let preview = item.querySelector('.pajaritos-image-preview');
+        const addBtn = item.querySelector('.pajaritos-add-image-btn');
+        const changeBtn = item.querySelector('.pajaritos-change-image-btn');
+        const removeBtn = item.querySelector('.pajaritos-remove-image-btn');
+        const downloadBtn = item.querySelector('.pajaritos-download-image-btn');
         
-        // Setup click on image preview to download
-        const imagePreviews = repliesContainer.querySelectorAll('.pajaritos-image-preview');
-        imagePreviews.forEach(preview => {
-          preview.onclick = () => {
-            const imageUrl = preview.dataset.imageUrl || preview.src;
-            const commentId = preview.dataset.commentId;
-            if (imageUrl && !imageUrl.includes('data:image/svg')) {
-              downloadImage(imageUrl, commentId);
+        // Clear image removed flag
+        if (input) {
+          input.dataset.imageRemoved = 'false';
+        }
+        
+        if (!preview) {
+          // Create preview element if it doesn't exist
+          const headerDiv = item.querySelector('div[style*="display: flex"]');
+          if (headerDiv) {
+            // Find or create the image container
+            let imgContainer = item.querySelector('.pajaritos-image-container');
+            if (!imgContainer) {
+              imgContainer = document.createElement('div');
+              imgContainer.className = 'pajaritos-image-container';
+              imgContainer.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-left: auto;';
+              
+              preview = document.createElement('img');
+              preview.className = 'pajaritos-image-preview';
+              preview.dataset.commentId = commentId;
+              preview.style.cssText = 'max-width: 80px; max-height: 80px; border-radius: 4px; object-fit: cover; cursor: pointer;';
+              
+              imgContainer.appendChild(preview);
+              
+              // Insert before add button or at the end
+              if (addBtn) {
+                addBtn.parentNode.insertBefore(imgContainer, addBtn.parentNode.firstChild);
+              }
             }
-          };
-        });
+          }
+          preview = item.querySelector('.pajaritos-image-preview');
+        }
+        
+        if (preview) {
+          preview.src = base64;
+          preview.dataset.imageUrl = base64;
+          preview.dataset.customImage = base64;
+          preview.style.display = 'block';
+        }
+        
+        // Show/hide appropriate buttons
+        if (addBtn) addBtn.style.display = 'none';
+        if (changeBtn) changeBtn.style.display = 'inline-block';
+        if (removeBtn) removeBtn.style.display = 'inline-block';
+        if (downloadBtn) {
+          downloadBtn.style.display = 'inline-block';
+          downloadBtn.dataset.imageUrl = base64;
+        }
+      }
+
+      // Keep the old function for backward compatibility
+      function updateImagePreview(index, base64) {
+        // Find the item by index and get its commentId
+        const allItems = Array.from(repliesContainer.querySelectorAll('.pajaritos-reply-item'));
+        const item = allItems[parseInt(index)];
+        if (item) {
+          const commentId = item.dataset.commentId;
+          if (commentId) {
+            updateImagePreviewByCommentId(commentId, base64);
+          }
+        }
+      }
+      
+      // Legacy function to remove image preview (delegates to handleRemoveImage)
+      function removeImagePreview(index) {
+        const allItems = Array.from(repliesContainer.querySelectorAll('.pajaritos-reply-item'));
+        const item = allItems[parseInt(index)];
+        if (item) {
+          const commentId = item.dataset.commentId;
+          if (commentId) {
+            handleRemoveImage(commentId);
+          }
+        }
       }
 
       // Function to generate unique ID for custom comments
@@ -2831,100 +2888,138 @@
         }
       }
 
+      // Lock to prevent rapid successive swaps
+      let isSwapping = false;
+      let lastSwapTime = 0;
+      const SWAP_COOLDOWN = 150; // Minimum ms between swaps
+      
       // Function to swap two adjacent reply items
       function swapReplies(currentIndex, direction) {
-        // Re-query items to ensure we have the current DOM state
-        // Only get items that are direct children of repliesContainer to avoid wrapper issues
-        const allItems = Array.from(repliesContainer.children).filter(child => 
-          child.classList.contains('pajaritos-reply-item')
-        );
-        const currentItem = allItems[currentIndex];
-        
-        if (!currentItem) return;
-        
-        // Calculate target index, but make sure we don't go beyond the actual items
-        const lastItemIndex = allItems.length - 1;
-        
-        let targetIndex;
-        if (direction === 'up') {
-          targetIndex = currentIndex - 1;
-          if (targetIndex < 0) return; // Can't move up from first position
-        } else {
-          targetIndex = currentIndex + 1;
-          if (targetIndex > lastItemIndex) return; // Can't move down from last position
+        // Prevent rapid successive swaps with both a lock and a cooldown
+        const now = Date.now();
+        if (isSwapping || (now - lastSwapTime < SWAP_COOLDOWN)) {
+          console.log('[Pajaritos] Swap blocked - too fast or in progress');
+          return;
         }
+        isSwapping = true;
+        lastSwapTime = now;
         
-        const targetItem = allItems[targetIndex];
-        if (!targetItem) return;
-        
-        // Both items should be direct children of repliesContainer
-        // Use repliesContainer as the parent for all swaps
-        if (currentItem.parentNode !== repliesContainer || targetItem.parentNode !== repliesContainer) {
-          console.error('[Pajaritos] Items are not direct children of repliesContainer', {
-            currentParent: currentItem.parentNode,
-            targetParent: targetItem.parentNode,
-            repliesContainer: repliesContainer
-          });
-          // Try to fix by moving items to repliesContainer if needed
-          if (currentItem.parentNode !== repliesContainer) {
-            repliesContainer.appendChild(currentItem);
-          }
-          if (targetItem.parentNode !== repliesContainer) {
-            repliesContainer.appendChild(targetItem);
-          }
-          // Re-query after fixing
-          const fixedItems = Array.from(repliesContainer.children).filter(child => 
+        try {
+          // Re-query items to ensure we have the current DOM state
+          // Only get items that are direct children of repliesContainer to avoid wrapper issues
+          const allItems = Array.from(repliesContainer.children).filter(child => 
             child.classList.contains('pajaritos-reply-item')
           );
-          const newCurrentIndex = fixedItems.indexOf(currentItem);
-          const newTargetIndex = fixedItems.indexOf(targetItem);
-          if (newCurrentIndex === -1 || newTargetIndex === -1) {
-            console.error('[Pajaritos] Could not fix item positions');
+          const currentItem = allItems[currentIndex];
+          
+          if (!currentItem) {
+            isSwapping = false;
             return;
           }
-          // Continue with the swap using repliesContainer as parent
-        }
-        
-        // Verify both items are actually children of repliesContainer
-        if (!repliesContainer.contains(currentItem) || !repliesContainer.contains(targetItem)) {
-          console.error('[Pajaritos] Items are not children of repliesContainer');
-          return;
-        }
-        
-        // Swap the items in the DOM
-        // Always use repliesContainer as the parent to ensure consistency
-        try {
+          
+          // Calculate target index, but make sure we don't go beyond the actual items
+          const lastItemIndex = allItems.length - 1;
+          
+          let targetIndex;
           if (direction === 'up') {
-            // Move currentItem before targetItem
-            repliesContainer.insertBefore(currentItem, targetItem);
+            targetIndex = currentIndex - 1;
+            if (targetIndex < 0) {
+              isSwapping = false;
+              return; // Can't move up from first position
+            }
           } else {
-            // Move currentItem after targetItem
-            // Get the next sibling of targetItem to insert before it
-            const nextSibling = targetItem.nextSibling;
-            if (nextSibling && nextSibling.classList.contains('pajaritos-reply-item')) {
-              // Next sibling is also a reply item, insert before it
-              repliesContainer.insertBefore(currentItem, nextSibling);
-            } else {
-              // Next sibling is the "Add new comment" button wrapper or nothing
-              // Insert before the next sibling (which might be the button wrapper)
-              if (nextSibling) {
-                repliesContainer.insertBefore(currentItem, nextSibling);
-              } else {
-                // targetItem is the last reply item, append currentItem after it
-                repliesContainer.insertBefore(currentItem, targetItem.nextSibling);
-              }
+            targetIndex = currentIndex + 1;
+            if (targetIndex > lastItemIndex) {
+              isSwapping = false;
+              return; // Can't move down from last position
             }
           }
-        } catch (error) {
-          console.error('[Pajaritos] Error swapping items:', error);
-          return;
+          
+          const targetItem = allItems[targetIndex];
+          if (!targetItem) {
+            isSwapping = false;
+            return;
+          }
+          
+          // Both items should be direct children of repliesContainer
+          // Use repliesContainer as the parent for all swaps
+          if (currentItem.parentNode !== repliesContainer || targetItem.parentNode !== repliesContainer) {
+            console.error('[Pajaritos] Items are not direct children of repliesContainer', {
+              currentParent: currentItem.parentNode,
+              targetParent: targetItem.parentNode,
+              repliesContainer: repliesContainer
+            });
+            // Try to fix by moving items to repliesContainer if needed
+            if (currentItem.parentNode !== repliesContainer) {
+              repliesContainer.appendChild(currentItem);
+            }
+            if (targetItem.parentNode !== repliesContainer) {
+              repliesContainer.appendChild(targetItem);
+            }
+            // Re-query after fixing
+            const fixedItems = Array.from(repliesContainer.children).filter(child => 
+              child.classList.contains('pajaritos-reply-item')
+            );
+            const newCurrentIndex = fixedItems.indexOf(currentItem);
+            const newTargetIndex = fixedItems.indexOf(targetItem);
+            if (newCurrentIndex === -1 || newTargetIndex === -1) {
+              console.error('[Pajaritos] Could not fix item positions');
+              isSwapping = false;
+              return;
+            }
+            // Continue with the swap using repliesContainer as parent
+          }
+          
+          // Verify both items are actually children of repliesContainer
+          if (!repliesContainer.contains(currentItem) || !repliesContainer.contains(targetItem)) {
+            console.error('[Pajaritos] Items are not children of repliesContainer');
+            isSwapping = false;
+            return;
+          }
+          
+          // Swap the items in the DOM
+          // Always use repliesContainer as the parent to ensure consistency
+          try {
+            if (direction === 'up') {
+              // Move currentItem before targetItem
+              repliesContainer.insertBefore(currentItem, targetItem);
+            } else {
+              // Move currentItem after targetItem
+              // Get the next sibling of targetItem to insert before it
+              // Skip text nodes and find the next element sibling
+              let nextSibling = targetItem.nextSibling;
+              while (nextSibling && nextSibling.nodeType !== Node.ELEMENT_NODE) {
+                nextSibling = nextSibling.nextSibling;
+              }
+              if (nextSibling && nextSibling.classList && nextSibling.classList.contains('pajaritos-reply-item')) {
+                // Next sibling is also a reply item, insert before it
+                repliesContainer.insertBefore(currentItem, nextSibling);
+              } else {
+                // Next sibling is the "Add new comment" button wrapper or nothing
+                // Insert before the next sibling (which might be the button wrapper)
+                if (nextSibling) {
+                  repliesContainer.insertBefore(currentItem, nextSibling);
+                } else {
+                  // targetItem is the last reply item, append currentItem after it
+                  repliesContainer.insertBefore(currentItem, targetItem.nextSibling);
+                }
+              }
+            }
+          } catch (error) {
+            console.error('[Pajaritos] Error swapping items:', error);
+            isSwapping = false;
+            return;
+          }
+          
+          // Update all indices and labels
+          updateReplyIndices();
+          
+          // Save the new order
+          saveFormData();
+        } finally {
+          // Always release the lock, even if there was an error
+          isSwapping = false;
         }
-        
-        // Update all indices and labels
-        updateReplyIndices();
-        
-        // Save the new order
-        saveFormData();
       }
       
       // Function to update indices and labels after reordering
@@ -2978,10 +3073,11 @@
             label.textContent = `Comentario ${newIndex + 1}:`;
           }
           
-          // Update up/down button states
+          // Update up/down button states and data-index
           const upBtn = item.querySelector('.pajaritos-move-up-btn');
           const downBtn = item.querySelector('.pajaritos-move-down-btn');
           if (upBtn) {
+            upBtn.dataset.index = newIndex;
             if (newIndex === 0) {
               upBtn.style.opacity = '0.5';
               upBtn.style.cursor = 'not-allowed';
@@ -2991,6 +3087,7 @@
             }
           }
           if (downBtn) {
+            downBtn.dataset.index = newIndex;
             // Exclude the "Add new comment" button from the count
             const addNewBtn = repliesContainer.querySelector('#pajaritos-add-new-comment-btn');
             const lastItemIndex = addNewBtn ? allItems.length - 1 : allItems.length;
@@ -3005,69 +3102,185 @@
         });
       }
       
-      // Function to setup listeners for new comment and delete buttons
+      // Use event delegation for all button clicks - single handler on container
+      // This prevents issues with multiple handlers being added
+      let delegationSetup = false;
+      let lastMoveClickTime = 0;
+      const MOVE_CLICK_COOLDOWN = 200; // Minimum ms between move button clicks
+      
       function setupNewCommentListeners() {
-        const addNewBtn = repliesContainer.querySelector('#pajaritos-add-new-comment-btn');
-        const deleteBtns = repliesContainer.querySelectorAll('.pajaritos-delete-comment-btn');
-        const moveUpBtns = repliesContainer.querySelectorAll('.pajaritos-move-up-btn');
-        const moveDownBtns = repliesContainer.querySelectorAll('.pajaritos-move-down-btn');
+        // Only setup delegation once
+        if (delegationSetup) return;
+        delegationSetup = true;
         
-        if (addNewBtn) {
-          addNewBtn.onclick = () => {
+        repliesContainer.addEventListener('click', (e) => {
+          const target = e.target;
+          
+          // Handle Add New Comment button
+          if (target.id === 'pajaritos-add-new-comment-btn' || target.closest('#pajaritos-add-new-comment-btn')) {
+            e.stopPropagation();
+            e.preventDefault();
             addNewComment();
-          };
-        }
-        
-        deleteBtns.forEach(btn => {
-          btn.onclick = () => {
-            const index = parseInt(btn.dataset.index);
+            return;
+          }
+          
+          // Handle Delete button
+          const deleteBtn = target.closest('.pajaritos-delete-comment-btn');
+          if (deleteBtn) {
+            e.stopPropagation();
+            e.preventDefault();
+            const index = parseInt(deleteBtn.dataset.index);
             deleteComment(index);
-          };
-        });
-        
-        moveUpBtns.forEach(btn => {
-          btn.onclick = () => {
-            const index = parseInt(btn.dataset.index);
+            return;
+          }
+          
+          // Handle Move Up button
+          const moveUpBtn = target.closest('.pajaritos-move-up-btn');
+          if (moveUpBtn) {
+            e.stopPropagation();
+            e.preventDefault();
+            
+            // Cooldown to prevent rapid clicks
+            const now = Date.now();
+            if (now - lastMoveClickTime < MOVE_CLICK_COOLDOWN) {
+              console.log('[Pajaritos] Move up blocked - click cooldown');
+              return;
+            }
+            lastMoveClickTime = now;
+            
+            const item = moveUpBtn.closest('.pajaritos-reply-item');
+            if (!item) return;
+            const allItems = Array.from(repliesContainer.children).filter(child => 
+              child.classList.contains('pajaritos-reply-item')
+            );
+            const index = allItems.indexOf(item);
             if (index > 0) {
               swapReplies(index, 'up');
             }
-          };
-        });
-        
-        moveDownBtns.forEach(btn => {
-          btn.onclick = () => {
-            const index = parseInt(btn.dataset.index);
-            const allItems = repliesContainer.querySelectorAll('.pajaritos-reply-item');
+            return;
+          }
+          
+          // Handle Move Down button
+          const moveDownBtn = target.closest('.pajaritos-move-down-btn');
+          if (moveDownBtn) {
+            e.stopPropagation();
+            e.preventDefault();
+            
+            // Cooldown to prevent rapid clicks
+            const now = Date.now();
+            if (now - lastMoveClickTime < MOVE_CLICK_COOLDOWN) {
+              console.log('[Pajaritos] Move down blocked - click cooldown');
+              return;
+            }
+            lastMoveClickTime = now;
+            
+            const item = moveDownBtn.closest('.pajaritos-reply-item');
+            if (!item) return;
+            const allItems = Array.from(repliesContainer.children).filter(child => 
+              child.classList.contains('pajaritos-reply-item')
+            );
+            const index = allItems.indexOf(item);
             if (index < allItems.length - 1) {
               swapReplies(index, 'down');
             }
-          };
-        });
-        
-        // Setup download image buttons
-        const downloadBtns = repliesContainer.querySelectorAll('.pajaritos-download-image-btn');
-        downloadBtns.forEach(btn => {
-          btn.onclick = () => {
-            const imageUrl = btn.dataset.imageUrl;
-            const input = repliesContainer.querySelector(`.pajaritos-reply-input[data-index="${btn.dataset.index}"]`);
-            const commentId = input ? input.dataset.commentId : null;
+            return;
+          }
+          
+          // Handle Download Image button
+          const downloadBtn = target.closest('.pajaritos-download-image-btn');
+          if (downloadBtn) {
+            e.stopPropagation();
+            e.preventDefault();
+            const imageUrl = downloadBtn.dataset.imageUrl;
+            const commentId = downloadBtn.dataset.commentId;
             if (imageUrl) {
               downloadImage(imageUrl, commentId);
             }
-          };
-        });
-        
-        // Setup click on image preview to download
-        const imagePreviews = repliesContainer.querySelectorAll('.pajaritos-image-preview');
-        imagePreviews.forEach(preview => {
-          preview.onclick = () => {
+            return;
+          }
+          
+          // Handle image preview click to download
+          const preview = target.closest('.pajaritos-image-preview');
+          if (preview) {
+            e.stopPropagation();
+            e.preventDefault();
             const imageUrl = preview.dataset.imageUrl || preview.src;
             const commentId = preview.dataset.commentId;
             if (imageUrl && !imageUrl.includes('data:image/svg')) {
               downloadImage(imageUrl, commentId);
             }
-          };
+            return;
+          }
+          
+          // Handle Add Image button
+          const addImageBtn = target.closest('.pajaritos-add-image-btn');
+          if (addImageBtn) {
+            e.stopPropagation();
+            e.preventDefault();
+            const commentId = addImageBtn.dataset.commentId;
+            const imageInput = repliesContainer.querySelector(`.pajaritos-image-input[data-comment-id="${commentId}"]`);
+            if (imageInput) {
+              imageInput.click();
+            }
+            return;
+          }
+          
+          // Handle Change Image button
+          const changeImageBtn = target.closest('.pajaritos-change-image-btn');
+          if (changeImageBtn) {
+            e.stopPropagation();
+            e.preventDefault();
+            const commentId = changeImageBtn.dataset.commentId;
+            const imageInput = repliesContainer.querySelector(`.pajaritos-image-input[data-comment-id="${commentId}"]`);
+            if (imageInput) {
+              imageInput.click();
+            }
+            return;
+          }
+          
+          // Handle Remove Image button
+          const removeImageBtn = target.closest('.pajaritos-remove-image-btn');
+          if (removeImageBtn) {
+            e.stopPropagation();
+            e.preventDefault();
+            const commentId = removeImageBtn.dataset.commentId;
+            handleRemoveImage(commentId);
+            return;
+          }
         });
+      }
+      
+      // Function to handle image removal
+      function handleRemoveImage(commentId) {
+        const item = repliesContainer.querySelector(`.pajaritos-reply-item[data-comment-id="${commentId}"]`);
+        if (!item) return;
+        
+        const preview = item.querySelector('.pajaritos-image-preview');
+        const input = item.querySelector('.pajaritos-reply-input');
+        
+        if (preview) {
+          preview.style.display = 'none';
+          preview.src = '';
+          preview.dataset.imageUrl = '';
+          preview.dataset.customImage = '';
+        }
+        
+        if (input) {
+          input.dataset.imageRemoved = 'true';
+        }
+        
+        // Hide image action buttons, show add button
+        const downloadBtn = item.querySelector('.pajaritos-download-image-btn');
+        const changeBtn = item.querySelector('.pajaritos-change-image-btn');
+        const removeBtn = item.querySelector('.pajaritos-remove-image-btn');
+        const addBtn = item.querySelector('.pajaritos-add-image-btn');
+        
+        if (downloadBtn) downloadBtn.style.display = 'none';
+        if (changeBtn) changeBtn.style.display = 'none';
+        if (removeBtn) removeBtn.style.display = 'none';
+        if (addBtn) addBtn.style.display = 'inline-block';
+        
+        saveFormData();
       }
 
       // Setup image buttons
